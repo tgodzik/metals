@@ -215,11 +215,12 @@ class MetalsGlobal(
                       )
                     }
                   } else {
-                    TypeRef(
+                    val tpe = TypeRef(
                       loop(pre, Some(ShortName(sym))),
                       sym,
                       args.map(arg => loop(arg, None))
                     )
+                    tpe
                   }
               }
           }
@@ -240,6 +241,9 @@ class MetalsGlobal(
             if (history.tryShortenName(name)) NoPrefix
             else new PrettyType(history.fullname(sym))
           } else {
+            // pprint.log(sym)
+            // pprint.log(name)
+            history.tryShortenName(ShortName(sym))
             TypeRef(NoPrefix, sym, Nil)
           }
         case ConstantType(Constant(sym: TermSymbol))

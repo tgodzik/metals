@@ -439,6 +439,7 @@ object CompletionCaseSuite extends BaseCompletionSuite {
     checkEditLine(
       "infix-conflict",
       """
+        |package a
         |object Outer {
         |  sealed trait List
         |  case class ::(a: Int, b: String) extends List
