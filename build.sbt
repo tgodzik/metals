@@ -372,6 +372,7 @@ lazy val cross = project
       case _ => Nil
     }),
     crossScalaVersions := V.supportedScalaVersions,
+    // javaOptions += "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005",
     scalacOptions ++= crossSetting(
       scalaVersion.value,
       if211 = List("-Xexperimental", "-Ywarn-unused-import")

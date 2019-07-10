@@ -156,6 +156,7 @@ final class BuildTargets() {
 
   def addWorkspaceBuildTargets(result: WorkspaceBuildTargetsResult): Unit = {
     result.getTargets.asScala.foreach { target =>
+      pprint.log(target)
       buildTargetInfo(target.getId) = target
       target.getDependencies.asScala.foreach { dependency =>
         val buf =
