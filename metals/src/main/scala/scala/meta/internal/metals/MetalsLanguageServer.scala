@@ -406,6 +406,8 @@ class MetalsLanguageServer(
       capabilities.setDefinitionProvider(true)
       capabilities.setHoverProvider(true)
       capabilities.setReferencesProvider(true)
+      capabilities.setColorProvider(true)
+
       capabilities.setDocumentHighlightProvider(true)
       capabilities.setSignatureHelpProvider(
         new SignatureHelpOptions(List("(", "[").asJava)
@@ -848,6 +850,23 @@ class MetalsLanguageServer(
   ): CompletableFuture[util.List[Location]] =
     CancelTokens { _ =>
       referencesResult(params).locations.asJava
+    }
+
+  @JsonRequest("textDocument/documentColor")
+  def colors(
+      params: DocumentColorParams
+  ): CompletableFuture[util.List[ColorInformation]] =
+    CancelTokens { _ =>
+      val source = params.getTextDocument.getUri.toAbsolutePath
+      val result = semanticdbs.textDocument(source)
+      val all = for {
+        doc <- result.documentIncludingStale.toList
+        occ <- doc.occurrences
+        if occ.symbol.isType
+        range <- occ.range
+      } yield
+        new ColorInformation(range.toLSP, new Color(131.0, 62.0, 12.0, 0.5))
+      all.asJava
     }
 
   // Triggers a cascade compilation and tries to find new references to a given symbol.
