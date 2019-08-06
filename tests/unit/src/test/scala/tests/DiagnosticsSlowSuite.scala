@@ -323,6 +323,10 @@ object DiagnosticsSlowSuite extends BaseSlowSuite("diagnostics") {
            |               ^^
            |""".stripMargin
       )
+      _ <- server.didSave("a/weird/path/A.scala")(
+        _.replaceAllLiterally("Int", "String")
+      )
+      _ = assertNoDiagnostics()
     } yield ()
   }
 }

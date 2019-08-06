@@ -1299,7 +1299,10 @@ class MetalsLanguageServer(
       path <- paths.iterator
       if path.isScalaOrJava
     } {
-      indexSourceFile(path, buildTargets.inverseSourceDirectory(path))
+      val sourceDirectory =
+        if (path.isDirectory) buildTargets.inverseSourceDirectory(path)
+        else None
+      indexSourceFile(path, sourceDirectory)
     }
   }
 
