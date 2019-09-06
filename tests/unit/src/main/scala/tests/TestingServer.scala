@@ -45,9 +45,7 @@ import org.eclipse.lsp4j.VersionedTextDocumentIdentifier
 import org.eclipse.lsp4j.WorkspaceClientCapabilities
 import org.eclipse.lsp4j.WorkspaceFolder
 import org.eclipse.{lsp4j => l}
-import org.scalactic.source.Position
 import tests.MetalsTestEnrichments._
-
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -78,7 +76,6 @@ import scala.meta.io.RelativePath
 import scala.{meta => m}
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
-
 import scala.meta.internal.tvp.TreeViewProvider
 
 /**
@@ -173,7 +170,7 @@ final class TestingServer(
   }
   def assertReferenceDefinitionDiff(
       expectedDiff: String
-  )(implicit pos: Position): Unit = {
+  ): Unit = {
     DiffAssertions.assertNoDiffOrPrintObtained(
       workspaceReferences().diff,
       expectedDiff,
@@ -407,15 +404,29 @@ final class TestingServer(
       (text, params) <- onTypeParams(filename, query, root)
       multiline <- server.onTypeFormatting(params).asScala
     } yield {
-      TestMultilineStrings.renderAsString(
-        text,
-        params,
-        multiline.asScala.toList
-      )
+      TextEdits.applyEdits(textContents(filename), multiline.asScala.toList)
     }
   }
 
   def onTypeFormatting(
+      filename: String,
+      query: String,
+      expected: String,
+      root: AbsolutePath = workspace
+  ): Future[Unit] = {
+    for {
+      format <- typeFormat(filename, query, root)
+    } yield {
+      DiffAssertions.assertNoDiffOrPrintObtained(
+        format,
+        expected,
+        "obtained",
+        "expected"
+      )
+    }
+  }
+
+  def rangeFormatting(
       filename: String,
       query: String,
       expected: String,
@@ -467,7 +478,19 @@ final class TestingServer(
       filename: String,
       original: String,
       root: AbsolutePath
-  ): Future[(String, TextDocumentPositionParams)] = {
+  ): Future[(String, TextDocumentPositionParams)] =
+    position(filename, original, root) {
+      case (text, textId, start) =>
+        (text, new TextDocumentPositionParams(textId, start))
+    }
+
+  private def position[T](
+      filename: String,
+      original: String,
+      root: AbsolutePath
+  )(
+      fn: (String, TextDocumentIdentifier, l.Position) => T
+  ): Future[T] = {
     val offset = original.indexOf("@@")
     if (offset < 0) sys.error(s"missing @@\n$original")
     val text = original.replaceAllLiterally("@@", "")
@@ -478,12 +501,10 @@ final class TestingServer(
     for {
       _ <- didChange(filename)(_ => text)
     } yield {
-      (
+      fn(
         text,
-        new TextDocumentPositionParams(
-          path.toTextDocumentIdentifier,
-          pos.toLSP.getStart
-        )
+        path.toTextDocumentIdentifier,
+        pos.toLSP.getStart
       )
     }
   }
@@ -492,33 +513,14 @@ final class TestingServer(
       filename: String,
       original: String,
       root: AbsolutePath
-  ): Future[(String, DocumentOnTypeFormattingParams)] = {
-    val preOffset = original.indexOf("@@")
-    val preNewline = original.substring(0, preOffset).lastIndexOf("\n")
-    val whitespace = original
-      .substring(preNewline + 1, preOffset + 1)
-      .takeWhile(_.isWhitespace)
-    val offset = preOffset + whitespace.length + 1
-    if (preOffset < 0) sys.error(s"missing @@\n$original")
-    if (offset < 0) sys.error(s"missing @@\n$original")
-    val trueOriginal = original.substring(0, preOffset + 2) + "\n" + whitespace + original
-      .substring(preOffset + 2)
-    val text = trueOriginal.replaceAllLiterally("@@", "")
-    val input = m.Input.String(text)
-    val path = root.resolve(filename)
-    path.touch()
-    val pos = m.Position.Range(input, offset, offset)
-    val documentParams = new DocumentOnTypeFormattingParams(
-      pos.toLSP.getStart,
-      "\n"
-    )
-    documentParams.setTextDocument(path.toTextDocumentIdentifier)
-    for {
-      _ <- didChange(filename)(_ => text)
-    } yield {
-      (text, documentParams)
+  ): Future[(String, DocumentOnTypeFormattingParams)] =
+    position(filename, original, root) {
+      case (text, textId, start) =>
+        // TODO fix with previous behaviour
+        val params = new DocumentOnTypeFormattingParams(start, "\n")
+        params.setTextDocument(textId)
+        (text, params)
     }
-  }
 
   def assertHover(
       filename: String,
