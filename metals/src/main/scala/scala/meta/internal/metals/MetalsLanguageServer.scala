@@ -345,6 +345,7 @@ class MetalsLanguageServer(
       interactiveSemanticdbs.toFileOnDisk
     )
     foldingRangeProvider = FoldingRangeProvider(trees, buffers, params)
+
     compilers = register(
       new Compilers(
         workspace,
@@ -359,7 +360,8 @@ class MetalsLanguageServer(
         ),
         embedded,
         statusBar,
-        sh
+        sh,
+        params
       )
     )
     doctor = new Doctor(

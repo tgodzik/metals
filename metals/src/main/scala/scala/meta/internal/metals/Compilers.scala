@@ -23,6 +23,7 @@ import scala.meta.pc.CancelToken
 import scala.meta.pc.PresentationCompiler
 import scala.meta.pc.SymbolSearch
 import scala.concurrent.Future
+import org.eclipse.lsp4j.InitializeParams
 
 /**
  * Manages lifecycle for presentation compilers in all build targets.
@@ -32,17 +33,35 @@ import scala.concurrent.Future
  */
 class Compilers(
     workspace: AbsolutePath,
-    config: MetalsServerConfig,
+    initialConfig: MetalsServerConfig,
     userConfig: () => UserConfiguration,
     buildTargets: BuildTargets,
     buffers: Buffers,
     search: SymbolSearch,
     embedded: Embedded,
     statusBar: StatusBar,
-    sh: ScheduledExecutorService
+    sh: ScheduledExecutorService,
+    params: InitializeParams
 )(implicit ec: ExecutionContextExecutorService)
     extends Cancelable {
   val plugins = new CompilerPlugins()
+
+  val snippetsSupported =
+    (for {
+      parameters <- Option(params)
+      capabilities <- Option(parameters.getCapabilities())
+      text <- Option(capabilities.getTextDocument())
+      completion <- Option(text.getCompletion())
+      item <- Option(completion.getCompletionItem())
+      snippet <- Option(item.getSnippetSupport())
+    } yield snippet.booleanValue).getOrElse(false)
+
+  val config =
+    initialConfig.copy(
+      compilers = initialConfig.compilers.copy(
+        isCompletionItemSnippetEnabled = snippetsSupported
+      )
+    )
 
   // Not a TrieMap because we want to avoid loading duplicate compilers for the same build target.
   // Not a `j.u.c.ConcurrentHashMap` because it can deadlock in `computeIfAbsent` when the absent

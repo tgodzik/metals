@@ -114,6 +114,7 @@ object MetalsServerConfig {
           )
         )
       case "vim-lsc" =>
+        benis
         base.copy(
           // window/logMessage output is always visible and non-invasive in vim-lsc
           statusBar = StatusBarConfig.logMessage,
