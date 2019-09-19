@@ -10,6 +10,7 @@ import scala.meta.internal.semanticdb.SymbolOccurrence
 import scala.meta.internal.semanticdb.ClassSignature
 import scala.meta.internal.semanticdb.TypeRef
 import scala.collection.concurrent.TrieMap
+import scala.meta.internal.semanticdb.SymbolInformation
 
 final class ImplementationProvider(
     semanticdbs: Semanticdbs,
@@ -24,6 +25,12 @@ final class ImplementationProvider(
   }
 
   def implementation(params: TextDocumentPositionParams): List[Location] = {
+
+    def getClassFromPart(symbol: SymbolInformation): String = {
+
+      "null"
+    }
+
     val source = params.getTextDocument.getUri.toAbsolutePath
     val result = semanticdbs.textDocument(source)
     for {
@@ -34,7 +41,10 @@ final class ImplementationProvider(
         doc
       )
       occ <- positionOccurrence.occurrence.toList
-      defn <- findImplementation(occ.symbol)
+      symbolToFind <- doc.symbols.find(_.symbol == occ.symbol).toList
+      isClass = symbolToFind.kind.isTrait || symbolToFind.kind.isClass
+      toFind = if (isClass) occ.symbol else getClassFromPart()
+      defn <- findImplementation(toFind)
       range <- defn.symbol.range
       revised <- positionOccurrence.distance.toRevised(range.toLSP)
       path = workspace.toNIO.resolve(Paths.get(defn.uri))
@@ -61,6 +71,7 @@ final class ImplementationProvider(
       doc.symbols.foreach { thisSymbol =>
         thisSymbol.signature match {
           case ClassSignature(typeParameters, parents, self, declarations) =>
+            pprint.log(declarations)
             parents.collect {
               case TypeRef(_, symbol, _) =>
                 doc.occurrences
