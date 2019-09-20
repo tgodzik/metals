@@ -6,7 +6,7 @@ import java.nio.file.Files
 import ch.epfl.scala.bsp4j.ScalacOptionsResult
 import scala.meta.internal.semanticdb.TextDocuments
 
-class SemanticDBIndexer(
+class SemanticdbIndexer(
     referenceProvider: ReferenceProvider,
     implementationProvider: ImplementationProvider
 ) {

@@ -12,6 +12,7 @@ import scala.meta.internal.semanticdb.TypeRef
 import scala.meta.internal.semanticdb.Signature
 import scala.meta.internal.semanticdb.TextDocument
 import java.util.concurrent.ConcurrentHashMap
+import java.nio.file.Path
 
 final class ImplementationProvider(
     semanticdbs: Semanticdbs,
@@ -39,21 +40,18 @@ final class ImplementationProvider(
       impl <- findImplementation(occ.symbol)
       range <- impl.symbol.range
       revised <- positionOccurrence.distance.toRevised(range.toLSP)
-      path = workspace.toNIO.resolve(Paths.get(impl.uri))
-      uri = path.toUri.toString
+      uri = impl.file.toUri.toString
     } yield new Location(uri, revised)
   }
 
   def onChange(docs: TextDocuments): Unit = {
-    docs.documents.foreach { doc =>
-      doc.symbols.foreach { thisSymbol =>
-        doc.occurrences
-          .find(
-            occ => occ.symbol == thisSymbol.symbol && occ.role.isDefinition
-          )
-          .foreach(occ => addFromSignature(thisSymbol.signature, occ, doc))
-      }
-    }
+    for {
+      doc <- docs.documents
+      thisSymbol <- doc.symbols
+      occ <- doc.occurrences.find(
+        occ => occ.symbol == thisSymbol.symbol && occ.role.isDefinition
+      )
+    } addFromSignature(thisSymbol.signature, occ, doc)
   }
 
   private def findImplementation(symbol: String): Set[ClassLocation] = {
@@ -76,7 +74,8 @@ final class ImplementationProvider(
       case classSig: ClassSignature =>
         classSig.parents.collect {
           case TypeRef(_, symbol, _) =>
-            val loc = ClassLocation(occ, doc.uri)
+            val filePath = workspace.toNIO.resolve(Paths.get(doc.uri))
+            val loc = ClassLocation(occ, filePath)
             implementations.compute(symbol, { (_, set) =>
               if (set == null) Set(loc)
               else set + loc
@@ -86,5 +85,5 @@ final class ImplementationProvider(
     }
   }
 
-  private case class ClassLocation(symbol: SymbolOccurrence, uri: String)
+  private case class ClassLocation(symbol: SymbolOccurrence, file: Path)
 }
