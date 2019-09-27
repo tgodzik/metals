@@ -10,7 +10,7 @@ import scala.meta.internal.semanticdb.TypeRef
 
 private[implementation] case class ClassLocation(
     symbol: String,
-    file: Path,
+    file: Option[Path],
     private val asSeenFrom: Option[Map[String, String]]
 ) {
 
@@ -67,7 +67,7 @@ private[implementation] object ClassLocation {
 
   def apply(
       symbol: String,
-      file: Path,
+      file: Option[Path],
       asSeenFrom: Map[String, String]
   ): ClassLocation = {
     if (asSeenFrom.isEmpty) {
@@ -79,7 +79,7 @@ private[implementation] object ClassLocation {
 
   def apply(
       symbol: String,
-      file: Path,
+      file: Option[Path],
       typeRef: TypeRef,
       classSignature: ClassSignature
   ): ClassLocation = {
