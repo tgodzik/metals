@@ -241,6 +241,19 @@ object ImplementationSuite extends BaseSlowSuite("implementation") {
        |""".stripMargin
   )
 
+  check(
+    "local-classes",
+    """|/a/src/main/scala/a/Main.scala
+       |package a
+       |object Main{
+       |  trait Fo@@od
+       |  type Eatable = Food
+       |  type Tasty = Eatable
+       |  class <<Pizza>> extends Tasty
+       |}
+       |""".stripMargin
+  )
+
   // TODO needs scalameta update
   // check(
   //   "anon",
