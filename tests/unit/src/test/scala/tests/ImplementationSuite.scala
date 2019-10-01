@@ -198,7 +198,6 @@ object ImplementationSuite extends BaseSlowSuite("implementation") {
        |""".stripMargin
   )
 
-  // TODO test higher kinded types plus parametrized
   check(
     "generic-impl-type",
     """|/a/src/main/scala/a/Main.scala
@@ -307,6 +306,29 @@ object ImplementationSuite extends BaseSlowSuite("implementation") {
        |package a
        |class <<Responsible>> extends B.Old
        |class <<Other>> extends Parent
+       |""".stripMargin
+  )
+
+  check(
+    "local-type-alias",
+    """|/a/src/main/scala/a/Parent.scala
+       |package a
+       |class Parent{
+       |  def m@@ethod(a : Parent.Name) = "<adult>"
+       |}
+       |object Parent{ 
+       |  type Name = String
+       |}
+       |/a/src/main/scala/a/Names.scala
+       |package a
+       |object Names {
+       |  type Basic = String
+       |}
+       |/a/src/main/scala/a/Father.scala
+       |package a
+       |class Father extends Parent {
+       |  override def <<method>>(a : Names.Basic) = "<father>"
+       |}
        |""".stripMargin
   )
 

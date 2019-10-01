@@ -37,7 +37,7 @@ final class ImplementationProvider(
 
   private val globalTable = new GlobalClassTable(buildTargets)
   private val implementationsInPath =
-    new ConcurrentHashMap[Path, LocalClassDefinitions]
+    new ConcurrentHashMap[Path, Map[String, Set[ClassLocation]]]
 
   def clear(): Unit = {
     implementationsInPath.clear()
@@ -72,23 +72,35 @@ final class ImplementationProvider(
       } else {
         findSemanticDbForSymbol(occ.symbol)
       }
-      val localContext = InheritanceContext.fromDefinitions(
-        _ => None,
-        implementationsInPath.asScala.toMap
-      )
+
       val context = definitionDocument match {
         case None =>
-          globalTable.indexFor(source, localContext)
+          globalTable.globalContextFor(
+            source,
+            implementationsInPath.asScala.toMap
+          )
         case Some(textDocument) =>
-          Some(localContext.copy(findSymbol = findSymbol(textDocument, _)))
+          lazy val global = globalTable.globalSymbolTableFor(source)
+          def symbolSearch(symbol: String) =
+            findSymbol(textDocument, symbol)
+              .orElse(findClassDef(symbol))
+              .orElse(global.flatMap(_.info(symbol)))
+
+          Some(
+            InheritanceContext.fromDefinitions(
+              symbolSearch,
+              implementationsInPath.asScala.toMap
+            )
+          )
       }
-      findLocations(occ.symbol, context)
+      findLocations(occ.symbol, source, context)
     }
     locations.flatten.toList
   }
 
   def findLocations(
       symbol: String,
+      source: AbsolutePath,
       context: Option[InheritanceContext]
   ): Iterable[Location] = {
     for {
@@ -107,9 +119,24 @@ final class ImplementationProvider(
       distance = TokenEditDistance.fromBuffer(fileSource, doc.text, buffer)
       impl <- locations
       implReal = impl.toRealNames(classSym, translateKey = true)
-      implOccurence <- if (isClassLike(sym))
-        findDefOccurence(doc, impl.symbol)
-      else MethodImplementation.find(sym, classSym, implReal, doc)
+      implSymbol <- if (isClassLike(sym))
+        Some(impl.symbol)
+      else {
+        lazy val global = globalTable.globalSymbolTableFor(source)
+        def localSearch(symbol: String): Option[SymbolInformation] = {
+          findSymbol(doc, symbol)
+            .orElse(findClassDef(symbol))
+            .orElse(global.flatMap(_.info(symbol)))
+        }
+        MethodImplementation.find(
+          sym,
+          classSym,
+          classContext,
+          implReal,
+          localSearch
+        )
+      }
+      implOccurence <- findDefOccurence(doc, implSymbol)
       range <- implOccurence.range
       revised <- distance.toRevised(range.toLSP)
       uri = realFile.toUri.toString
@@ -135,9 +162,8 @@ final class ImplementationProvider(
 
   private def computeInheritance(
       docs: TextDocuments
-  ): LocalClassDefinitions = {
+  ): Map[String, Set[ClassLocation]] = {
     val allParents = new mutable.ListBuffer[(String, ClassLocation)]
-    val allTypeAliases = new mutable.ListBuffer[(String, String)]
     for {
       doc <- docs.documents
       thisSymbol <- doc.symbols
@@ -151,14 +177,11 @@ final class ImplementationProvider(
         )
       }
     }
-
     val mappedParents = allParents.groupBy(_._1).map {
       case (symbol, locations) =>
         symbol -> locations.map(_._2).toSet
     }
-    LocalClassDefinitions(
-      inheritance = mappedParents
-    )
+    mappedParents
 
   }
 
@@ -185,33 +208,54 @@ final class ImplementationProvider(
       findSymbol(info.symbol.owner)
         .filter(info => isClassLike(info))
     }
-
-    def dealiasClass(info: SymbolInformation): SymbolInformation = {
-      if (info.isType) {
-        info.signature match {
-          case ts: TypeSignature =>
-            ts.upperBound match {
-              case tr: TypeRef =>
-                findSymbol(tr.symbol)
-                  .orElse(findClassDef(tr.symbol))
-                  .map(dealiasClass)
-                  .getOrElse(info)
-              case _ =>
-                info
-            }
-          case _ => info
-        }
-      } else {
-        info
-      }
-    }
-
-    classInfo.map(dealiasClass)
+    classInfo.map(inf => dealiasClass(inf, findSymbol))
   }
 
 }
 
 object ImplementationProvider {
+
+  // TODO maybe we don't have to look if we can know the symbol is not a type
+  def dealiasClass(
+      symbol: String,
+      findSymbol: String => Option[SymbolInformation]
+  ): String = {
+    findSymbol(symbol)
+      .map(inf => dealiasClass(inf, findSymbol))
+      .map(_.symbol)
+      .getOrElse(symbol)
+  }
+
+  def dealiasClass(
+      info: SymbolInformation,
+      findSymbol: String => Option[SymbolInformation]
+  ): SymbolInformation = {
+    if (info.isType) {
+      info.signature match {
+        case ts: TypeSignature =>
+          ts.upperBound match {
+            case tr: TypeRef =>
+              findSymbol(tr.symbol)
+                .getOrElse(info)
+            case _ =>
+              info
+          }
+        case _ => info
+      }
+    } else {
+      info
+    }
+  }
+
+  def findSymbol(
+      semanticDb: TextDocument,
+      symbol: String
+  ): Option[SymbolInformation] = {
+    semanticDb.symbols
+      .find(
+        sym => sym.symbol == symbol
+      )
+  }
 
   def parentsFromSignature(
       symbol: String,
@@ -257,7 +301,7 @@ object ImplementationProvider {
         fromClassSignature(classSig)
       case ts: TypeSignature =>
         fromTypeSignature(ts)
-      case _ =>
+      case other =>
         Seq.empty
     }
   }
@@ -268,15 +312,6 @@ object ImplementationProvider {
   ): Option[SymbolOccurrence] = {
     semanticDb.occurrences.find(
       occ => occ.role.isDefinition && occ.symbol == symbol
-    )
-  }
-
-  def findSymbol(
-      semanticDb: TextDocument,
-      symbol: String
-  ): Option[SymbolInformation] = {
-    semanticDb.symbols.find(
-      sym => sym.symbol == symbol
     )
   }
 
