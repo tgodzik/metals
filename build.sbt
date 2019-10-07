@@ -150,7 +150,8 @@ lazy val V = new {
   // List of supported Scala versions in SemanticDB. Needs to be manually updated
   // for every SemanticDB upgrade.
   def supportedScalaVersions =
-    Seq("2.13.0", scala213, "2.12.8", "2.12.9", scala212) ++ deprecatedScalaVersions
+    Seq("2.13.0", scala213, "2.12.8", "2.12.9", scala212) ++ deprecatedScalaVersions ++ dottyVersions
+  def dottyVersions = Seq("0.20.0-bin-20191005-d67af24-NIGHTLY")
   def deprecatedScalaVersions = Seq("2.12.7", scala211)
   def guava = "com.google.guava" % "guava" % "28.0-jre"
   def lsp4j = "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.8.0"
@@ -179,6 +180,20 @@ val genyVersion = Def.setting {
   if (scalaVersion.value.startsWith("2.11")) "0.1.6"
   else "0.1.8"
 }
+
+lazy val dtags = project
+  .settings(
+    scalaVersion := "0.20.0-bin-20191005-d67af24-NIGHTLY",
+    moduleName := "dtags",
+    libraryDependencies := List(
+      "ch.epfl.lamp" % "dotty-compiler_0.20" % "0.20.0-bin-20191005-d67af24-NIGHTLY",
+      "com.fasterxml.jackson.core" % "jackson-databind" % "2.9.8"
+    ),
+    scalacOptions ++= Seq(
+      "-language:implicitConversions"
+    )
+  )
+  .dependsOn(interfaces)
 
 lazy val mtags = project
   .settings(

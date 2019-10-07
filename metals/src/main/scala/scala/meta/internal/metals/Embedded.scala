@@ -78,7 +78,11 @@ final class Embedded(
     val classloader = presentationCompilers.getOrElseUpdate(
       ScalaVersions.dropVendorSuffix(info.getScalaVersion),
       statusBar.trackSlowTask("Downloading presentation compiler") {
-        Embedded.newPresentationCompilerClassLoader(info, scalac)
+        if (ScalaVersions.isDotty(info.getScalaVersion())) {
+          Embedded.newDottyPresentationCompilerClassLoader(info, scalac)
+        } else {
+          Embedded.newPresentationCompilerClassLoader(info, scalac)
+        }
       }
     )
     val services =
@@ -98,19 +102,37 @@ final class Embedded(
 }
 
 object Embedded {
+  def dottySettings(
+      dependency: Dependency,
+      scalaVersion: String
+  ): Settings =
+    baseDownloadSettings(dependency)
+  // TODO might be needed
+  // .withForceVersions(
+  //   List(
+  //     new Dependency(
+  //       "org.scala-lang",
+  //       "scala-library",
+  //       scalaVersion
+  //     ),
+  //     new Dependency(
+  //       "org.scala-lang",
+  //       "scala-compiler",
+  //       scalaVersion
+  //     ),
+  //     new Dependency(
+  //       "org.scala-lang",
+  //       "scala-reflect",
+  //       scalaVersion
+  //     )
+  //   )
+  // )
+
   def downloadSettings(
       dependency: Dependency,
       scalaVersion: String
   ): Settings =
-    new coursiersmall.Settings()
-      .withTtl(Some(Duration.Inf))
-      .withDependencies(List(dependency))
-      .addRepositories(
-        List(
-          coursiersmall.Repository.SonatypeReleases,
-          coursiersmall.Repository.SonatypeSnapshots
-        )
-      )
+    baseDownloadSettings(dependency)
       .withForceVersions(
         List(
           new Dependency(
@@ -130,6 +152,18 @@ object Embedded {
           )
         )
       )
+
+  private def baseDownloadSettings(dependency: Dependency) = {
+    new coursiersmall.Settings()
+      .withTtl(Some(Duration.Inf))
+      .withDependencies(List(dependency))
+      .addRepositories(
+        List(
+          coursiersmall.Repository.SonatypeReleases,
+          coursiersmall.Repository.SonatypeSnapshots
+        )
+      )
+  }
 
   def newPresentationCompilerClassLoader(
       info: ScalaBuildTarget,
@@ -154,6 +188,26 @@ object Embedded {
     val jars = CoursierSmall.fetch(settings)
     val scalaJars = info.getJars.asScala.map(_.toAbsolutePath.toNIO)
     val allJars = Iterator(jars, scalaJars, semanticdbJars).flatten
+    val allURLs = allJars.map(_.toUri.toURL).toArray
+    // Share classloader for a subset of types.
+    val parent =
+      new PresentationCompilerClassLoader(this.getClass.getClassLoader)
+    new URLClassLoader(allURLs, parent)
+  }
+
+  def newDottyPresentationCompilerClassLoader(
+      info: ScalaBuildTarget,
+      scalac: ScalacOptionsItem
+  ): URLClassLoader = {
+    val pc = new Dependency(
+      "org.scalameta",
+      s"dtags_0.20", // TODO ${ScalaVersions.dropVendorSuffix(info.getScalaVersion)}
+      BuildInfo.metalsVersion
+    )
+    val settings = dottySettings(pc, info.getScalaVersion())
+    val jars = CoursierSmall.fetch(settings)
+    val scalaJars = info.getJars.asScala.map(_.toAbsolutePath.toNIO)
+    val allJars = Iterator(jars, scalaJars).flatten
     val allURLs = allJars.map(_.toUri.toURL).toArray
     // Share classloader for a subset of types.
     val parent =
