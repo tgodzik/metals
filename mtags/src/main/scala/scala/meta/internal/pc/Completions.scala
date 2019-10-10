@@ -7,7 +7,6 @@ import scala.meta.internal.semanticdb.Scala._
 import scala.collection.mutable
 import scala.meta.internal.mtags.MtagsEnrichments._
 import scala.util.control.NonFatal
-import scala.meta.internal.jdk.CollectionConverters._
 import scala.collection.mutable.ListBuffer
 import scala.meta.pc.PresentationCompilerConfig.OverrideDefFormat
 import java.nio.file.Paths
