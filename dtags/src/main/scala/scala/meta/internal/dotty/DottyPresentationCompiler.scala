@@ -7,6 +7,7 @@ import scala.meta.pc.DefinitionResult
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.ScheduledExecutorService
 import scala.meta.pc.OffsetParams
+import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
@@ -56,6 +57,11 @@ class DottyPresentationCompiler(
 ) extends PresentationCompiler {
 
   def this() = this(buildTargetIdentifier = "")
+  def didChange(
+      filename: String,
+      code: String
+  ): CompletableFuture[ju.List[Diagnostic]] =
+    CompletableFuture.completedFuture(List.empty[Diagnostic].asJava)
 
   import InteractiveDriver._
   var currentDriver: Option[InteractiveDriver] = None
