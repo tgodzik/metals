@@ -33,9 +33,11 @@ import scala.meta.io.AbsolutePath
 import scala.util.control.NonFatal
 import scala.{meta => m}
 import org.eclipse.lsp4j.jsonrpc.messages.{Either => JEither}
+import scala.collection.convert.DecorateAsJava
+import scala.collection.convert.DecorateAsScala
 
 object MtagsEnrichments extends MtagsEnrichments
-trait MtagsEnrichments {
+trait MtagsEnrichments extends DecorateAsJava with DecorateAsScala {
   implicit class XtensionRange(range: s.Range) {
     def isPoint: Boolean = {
       range.startLine == range.endLine &&
@@ -365,7 +367,6 @@ trait MtagsEnrichments {
   }
 
   implicit class XtensionStream[A](stream: java.util.stream.Stream[A]) {
-    import scala.collection.JavaConverters._
     def asScala: Generator[A] = {
       Generator.selfClosing((stream.iterator.asScala, () => stream.close()))
     }
@@ -389,6 +390,33 @@ trait MtagsEnrichments {
       if (path.isDirectory) Files.walk(path.toNIO).asScala.map(AbsolutePath(_))
       else if (path.isFile) Generator(path)
       else Generator()
+    }
+  }
+
+  implicit class XtensionToken(token: m.Token) {
+    def isWhiteSpaceOrComment = token match {
+      case _: m.Token.Space | _: m.Token.Tab | _: m.Token.CR | _: m.Token.LF |
+          _: m.Token.LFLF | _: m.Token.FF | _: m.Token.Comment |
+          _: m.Token.BOF | _: m.Token.EOF =>
+        true
+      case _ => false
+    }
+  }
+
+  implicit class XtensionStringMtags(value: String) {
+
+    def toAbsolutePath: AbsolutePath =
+      AbsolutePath(Paths.get(URI.create(value.stripPrefix("metals:")))).dealias
+    def lastIndexBetween(
+        char: Char,
+        lowerBound: Int = 0,
+        upperBound: Int = value.size
+    ) = {
+      var index = upperBound
+      while (index > lowerBound && value(index) != char) {
+        index -= 1
+      }
+      index
     }
   }
 }

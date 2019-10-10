@@ -5,7 +5,7 @@ import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.SymbolKind
 import org.eclipse.{lsp4j => l}
 import scala.meta._
-import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.mtags.MtagsEnrichments._
 import scala.meta.transversers.SimpleTraverser
 
 /**

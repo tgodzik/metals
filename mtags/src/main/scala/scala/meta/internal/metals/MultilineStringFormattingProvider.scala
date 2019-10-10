@@ -6,8 +6,7 @@ import org.eclipse.lsp4j.TextEdit
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.meta.inputs.Input
-import scala.meta.internal.metals.MetalsEnrichments._
-import scala.meta.internal.mtags.Semanticdbs
+import scala.meta.internal.mtags.MtagsEnrichments._
 import scala.meta.tokens.Token
 import scala.meta.tokens.Token.Constant
 import scala.meta.tokens.Tokens
@@ -19,10 +18,7 @@ import org.eclipse.lsp4j.Position
 /*in order to use onTypeFormatting in vscode,
 you'll have to set editor.formatOnType = true
 and editor.formatOnPaste = true in settings*/
-final class MultilineStringFormattingProvider(
-    semanticdbs: Semanticdbs,
-    buffer: Buffers
-)(implicit ec: ExecutionContext) {
+final class MultilineStringFormattingProvider()(implicit ec: ExecutionContext) {
 
   private val quote = '"'
   private val space = " "

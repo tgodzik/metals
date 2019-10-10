@@ -58,10 +58,7 @@ import java.nio.file.StandardOpenOption
  * then we can split this up, but for now it's really convenient to have to
  * remember only one import.
  */
-object MetalsEnrichments
-    extends DecorateAsJava
-    with DecorateAsScala
-    with MtagsEnrichments {
+object MetalsEnrichments extends MtagsEnrichments {
 
   implicit class XtensionBuildTarget(buildTarget: b.BuildTarget) {
     def asScalaBuildTarget: Option[b.ScalaBuildTarget] = {
@@ -364,21 +361,6 @@ object MetalsEnrichments
       isCompilerPlugin("scalajs-compiler", "scala-js") ||
       value.startsWith("-P:scalajs:")
     }
-
-    def lastIndexBetween(
-        char: Char,
-        lowerBound: Int = 0,
-        upperBound: Int = value.size
-    ) = {
-      var index = upperBound
-      while (index > lowerBound && value(index) != char) {
-        index -= 1
-      }
-      index
-    }
-
-    def toAbsolutePath: AbsolutePath =
-      AbsolutePath(Paths.get(URI.create(value.stripPrefix("metals:")))).dealias
   }
 
   implicit class XtensionTextDocumentSemanticdb(textDocument: s.TextDocument) {
@@ -514,16 +496,6 @@ object MetalsEnrichments
   implicit class XtensionPromise[T](promise: Promise[T]) {
     def cancel(): Unit =
       promise.tryFailure(new CancellationException())
-  }
-
-  implicit class XtensionToken(token: Token) {
-    def isWhiteSpaceOrComment = token match {
-      case _: Token.Space | _: Token.Tab | _: Token.CR | _: Token.LF |
-          _: Token.LFLF | _: Token.FF | _: Token.Comment | _: Token.BOF |
-          _: Token.EOF =>
-        true
-      case _ => false
-    }
   }
 
   implicit class XtensionTreeTokenStream(tree: Tree) {
