@@ -5,7 +5,9 @@ import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.SignatureHelp;
+import org.eclipse.lsp4j.Diagnostic;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.List;
@@ -62,6 +64,11 @@ public abstract class PresentationCompiler {
 
      */
     public abstract CompletableFuture<DefinitionResult> definition(OffsetParams params);
+
+    /**
+     * The text contents of the fiven file changed.
+     */
+    public abstract CompletableFuture<List<Diagnostic>> didChange(String filename, String code);
 
     /**
      * Returns the Protobuf byte array representation of a SemanticDB <code>TextDocument</code> for the given source.

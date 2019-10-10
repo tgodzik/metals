@@ -26,6 +26,8 @@ import scala.meta.pc.PresentationCompilerConfig
 import java.util.concurrent.CompletableFuture
 import scala.meta.pc.DefinitionResult
 import scala.collection.Seq
+import java.{util => ju}
+import org.eclipse.lsp4j.Diagnostic
 
 case class ScalaPresentationCompiler(
     buildTargetIdentifier: String = "",
@@ -39,6 +41,11 @@ case class ScalaPresentationCompiler(
   val logger = Logger.getLogger(classOf[ScalaPresentationCompiler].getName)
   override def withSearch(search: SymbolSearch): PresentationCompiler =
     copy(search = search)
+  override def didChange(
+      filename: String,
+      code: String
+  ): CompletableFuture[ju.List[Diagnostic]] =
+    CompletableFuture.completedFuture(ju.Collections.emptyList())
   override def withExecutorService(
       executorService: ExecutorService
   ): PresentationCompiler =

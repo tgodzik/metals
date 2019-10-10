@@ -376,7 +376,8 @@ class MetalsLanguageServer(
         ),
         embedded,
         statusBar,
-        sh
+        sh,
+        diagnostics
       )
     )
     doctor = new Doctor(
@@ -703,7 +704,8 @@ class MetalsLanguageServer(
       case Some(change) =>
         val path = params.getTextDocument.getUri.toAbsolutePath
         buffers.put(path, change.getText)
-        diagnostics.didChange(path)
+        compilers.didChange(path)
+        // diagnostics.didChange(path)
         parseTrees(path).asJava
     }
 

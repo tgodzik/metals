@@ -39,7 +39,8 @@ class Compilers(
     search: SymbolSearch,
     embedded: Embedded,
     statusBar: StatusBar,
-    sh: ScheduledExecutorService
+    sh: ScheduledExecutorService,
+    diagnostics: Diagnostics
 )(implicit ec: ExecutionContextExecutorService)
     extends Cancelable {
   val plugins = new CompilerPlugins()
@@ -101,6 +102,11 @@ class Compilers(
       }
     }
 
+  def didChange(path: AbsolutePath): Unit = {
+    loadCompiler(path, None).foreach { pc =>
+      pc.didChange(path.toURI, buffers.get(path))
+    }
+  }
   def didCompile(report: CompileReport): Unit = {
     if (report.getErrors > 0) {
       cache.get(report.getTarget).foreach(_.restart())
