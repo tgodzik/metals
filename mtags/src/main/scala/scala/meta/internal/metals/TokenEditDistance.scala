@@ -6,7 +6,7 @@ import org.eclipse.{lsp4j => l}
 import scala.annotation.tailrec
 import scala.meta.Token
 import scala.meta._
-import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.mtags.MtagsEnrichments._
 
 /** Helper to map between position between two similar strings. */
 final class TokenEditDistance private (
