@@ -173,8 +173,13 @@ final class FoldingRangeExtractor(
           startToken <- term.expr.findFirstTrailing(_.is[Token.KwCatch])
           lastCase <- term.catchp.lastOption
           endToken <- lastCase.findFirstTrailing(_.is[Token.RightBrace])
-        } yield Position
-          .Range(tree.pos.input, startToken.pos.end, endToken.pos.end)
+        } yield {
+          Position.Range(
+            tree.pos.input,
+            startToken.pos.end,
+            endToken.pos.end
+          )
+        }
 
       case For(endPosition) =>
         val start = tree.pos.start + 3

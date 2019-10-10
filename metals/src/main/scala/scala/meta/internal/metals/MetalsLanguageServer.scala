@@ -142,7 +142,7 @@ class MetalsLanguageServer(
   private var diagnostics: Diagnostics = _
   private var warnings: Warnings = _
   private var trees: Trees = _
-  private var documentSymbolProvider: DocumentSymbolProvider = _
+  // private var documentSymbolProvider: DocumentSymbolProvider = _
   private var fileSystemSemanticdbs: FileSystemSemanticdbs = _
   private var interactiveSemanticdbs: InteractiveSemanticdbs = _
   private var buildTools: BuildTools = _
@@ -156,12 +156,12 @@ class MetalsLanguageServer(
   private var implementationProvider: ImplementationProvider = _
   private var documentHighlightProvider: DocumentHighlightProvider = _
   private var formattingProvider: FormattingProvider = _
-  private var multilineStringFormattingProvider
-      : MultilineStringFormattingProvider = _
+  // private var multilineStringFormattingProvider
+  //     : MultilineStringFormattingProvider = _
   private var initializeParams: Option[InitializeParams] = None
   private var referencesProvider: ReferenceProvider = _
   private var workspaceSymbols: WorkspaceSymbolProvider = _
-  private var foldingRangeProvider: FoldingRangeProvider = _
+  // private var foldingRangeProvider: FoldingRangeProvider = _
   private val packageProvider: PackageProvider =
     new PackageProvider(buildTargets)
   private var compilers: Compilers = _
@@ -360,7 +360,7 @@ class MetalsLanguageServer(
       },
       interactiveSemanticdbs.toFileOnDisk
     )
-    foldingRangeProvider = FoldingRangeProvider(trees, buffers, params)
+    // foldingRangeProvider = FoldingRangeProvider(trees, buffers, params)
     compilers = register(
       new Compilers(
         workspace,
@@ -852,7 +852,7 @@ class MetalsLanguageServer(
     JEither[util.List[DocumentSymbol], util.List[SymbolInformation]]
   ] =
     CancelTokens { _ =>
-      val result = documentSymbolResult(params)
+      val result = compilers.documentSymbol(params).asJava.get // TODO: no blocking
       if (initializeParams.supportsHierarchicalDocumentSymbols) {
         JEither.forLeft(result)
       } else {
@@ -878,36 +878,16 @@ class MetalsLanguageServer(
   def onTypeFormatting(
       params: DocumentOnTypeFormattingParams
   ): CompletableFuture[util.List[TextEdit]] =
-    CancelTokens.future { _ =>
-      multilineStringFormattingProvider
-        .onTypeFormatting(
-          params,
-          params
-            .getTextDocument()
-            .getUri()
-            .toAbsolutePath
-            .toInputFromBuffers(buffers)
-            .value
-        )
-        .map(_.asJava)
+    CancelTokens.future { token =>
+      compilers.onTypeFormatting(params, token)
     }
 
   @JsonRequest("textDocument/rangeFormatting")
   def rangeFormatting(
       params: DocumentRangeFormattingParams
   ): CompletableFuture[util.List[TextEdit]] =
-    CancelTokens.future { _ =>
-      multilineStringFormattingProvider
-        .rangeFormatting(
-          params,
-          params
-            .getTextDocument()
-            .getUri()
-            .toAbsolutePath
-            .toInputFromBuffers(buffers)
-            .value
-        )
-        .map(_.asJava)
+    CancelTokens.future { token =>
+      compilers.rangeFormatting(params, token)
     }
 
   @JsonRequest("textDocument/rename")
@@ -1040,9 +1020,8 @@ class MetalsLanguageServer(
   def foldingRange(
       params: FoldingRangeRequestParams
   ): CompletableFuture[util.List[FoldingRange]] = {
-    CancelTokens { _ =>
-      val sourceFile = params.getTextDocument.getUri.toAbsolutePath
-      foldingRangeProvider.getRangedFor(sourceFile)
+    CancelTokens.future { token =>
+      compilers.foldingRange(params, token)
     }
   }
 
@@ -1742,9 +1721,9 @@ class MetalsLanguageServer(
 
   def documentSymbolResult(
       params: DocumentSymbolParams
-  ): util.List[DocumentSymbol] = {
-    documentSymbolProvider
-      .documentSymbols(params.getTextDocument.getUri.toAbsolutePath)
+  ): Future[util.List[DocumentSymbol]] = {
+    ???
+    // compilers.documentSymbols(p)
   }
 
   private def newSymbolIndex(): OnDemandSymbolIndex = {

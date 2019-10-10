@@ -6,6 +6,7 @@ import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.SignatureHelp;
 import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.FoldingRange;
 
 import java.net.URI;
 import java.nio.file.Path;
@@ -69,6 +70,8 @@ public abstract class PresentationCompiler {
      * The text contents of the fiven file changed.
      */
     public abstract CompletableFuture<List<Diagnostic>> didChange(String filename, String code);
+
+    public abstract CompletableFuture<List<FoldingRange>> foldingRange(VirtualFileParams params);
 
     /**
      * Returns the Protobuf byte array representation of a SemanticDB <code>TextDocument</code> for the given source.

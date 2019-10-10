@@ -28,6 +28,8 @@ import scala.meta.pc.DefinitionResult
 import scala.collection.Seq
 import java.{util => ju}
 import org.eclipse.lsp4j.Diagnostic
+import scala.meta.pc.VirtualFileParams
+import org.eclipse.lsp4j.FoldingRange
 
 case class ScalaPresentationCompiler(
     buildTargetIdentifier: String = "",
@@ -46,6 +48,9 @@ case class ScalaPresentationCompiler(
       code: String
   ): CompletableFuture[ju.List[Diagnostic]] =
     CompletableFuture.completedFuture(ju.Collections.emptyList())
+  def foldingRange(
+      params: VirtualFileParams
+  ): CompletableFuture[ju.List[FoldingRange]] = ???
   override def withExecutorService(
       executorService: ExecutorService
   ): PresentationCompiler =

@@ -23,6 +23,14 @@ import scala.meta.pc.CancelToken
 import scala.meta.pc.PresentationCompiler
 import scala.meta.pc.SymbolSearch
 import scala.concurrent.Future
+import org.eclipse.lsp4j.FoldingRange
+import java.{util => ju}
+import org.eclipse.lsp4j.DocumentOnTypeFormattingParams
+import org.eclipse.lsp4j.TextEdit
+import org.eclipse.lsp4j.DocumentRangeFormattingParams
+import org.eclipse.lsp4j.FoldingRangeRequestParams
+import org.eclipse.lsp4j.DocumentSymbolParams
+import org.eclipse.lsp4j.DocumentSymbol
 
 /**
  * Manages lifecycle for presentation compilers in all build targets.
@@ -102,6 +110,31 @@ class Compilers(
       }
     }
 
+  def foldingRange(
+      params: FoldingRangeRequestParams,
+      token: CancelToken
+  ): Future[ju.List[FoldingRange]] = {
+    val sourceFile = params.getTextDocument.getUri.toAbsolutePath
+    // foldingRangeProvider.getRangedFor(sourceFile)
+    ???
+  }
+  def onTypeFormatting(
+      params: DocumentOnTypeFormattingParams,
+      token: CancelToken
+  ): Future[ju.List[TextEdit]] = {
+    ???
+  }
+  def rangeFormatting(
+      params: DocumentRangeFormattingParams,
+      token: CancelToken
+  ): Future[ju.List[TextEdit]] = {
+    ???
+  }
+  def documentSymbol(
+      params: DocumentSymbolParams
+  ): Future[ju.List[DocumentSymbol]] = {
+    ???
+  }
   def didChange(path: AbsolutePath): Unit = {
     val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
     val input = path.toInputFromBuffers(buffers)
