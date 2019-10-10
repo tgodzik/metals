@@ -17,8 +17,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.{lsp4j => l}
-import scala.collection.convert.DecorateAsJava
-import scala.collection.convert.DecorateAsScala
 import scala.compat.java8.FutureConverters
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
@@ -27,7 +25,6 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.Promise
 import scala.meta.Tree
 import scala.meta.inputs.Input
-import scala.meta.internal.io.FileIO
 import scala.meta.internal.mtags.MtagsEnrichments
 import scala.meta.internal.semanticdb.Scala.Descriptor
 import scala.meta.internal.semanticdb.Scala.Symbols
