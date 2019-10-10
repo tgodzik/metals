@@ -274,16 +274,6 @@ object MetalsEnrichments extends MtagsEnrichments {
       filename.endsWith(".jar")
     }
 
-    /**
-     * Reads file contents from editor buffer with fallback to disk.
-     */
-    def toInputFromBuffers(buffers: Buffers): Input.VirtualFile = {
-      buffers.get(path) match {
-        case Some(text) => Input.VirtualFile(path.toString(), text)
-        case None => path.toInput
-      }
-    }
-
     def touch(): Unit = {
       if (!path.exists) {
         path.parent.createDirectories()

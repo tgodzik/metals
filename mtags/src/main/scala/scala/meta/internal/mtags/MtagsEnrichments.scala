@@ -37,6 +37,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.{Either => JEither}
 import scala.collection.convert.DecorateAsJava
 import scala.collection.convert.DecorateAsScala
 import java.net.URI
+import scala.meta.internal.metals.Buffers
 
 object MtagsEnrichments extends MtagsEnrichments
 trait MtagsEnrichments extends DecorateAsJava with DecorateAsScala {
@@ -82,6 +83,16 @@ trait MtagsEnrichments extends DecorateAsJava with DecorateAsScala {
     }
   }
   implicit class XtensionAbsolutePathMtags(file: AbsolutePath) {
+
+    /**
+     * Reads file contents from editor buffer with fallback to disk.
+     */
+    def toInputFromBuffers(buffers: Buffers): m.Input.VirtualFile = {
+      buffers.get(file) match {
+        case Some(text) => Input.VirtualFile(file.toString(), text)
+        case None => file.toInput
+      }
+    }
 
     // Using [[Files.isSymbolicLink]] is not enough.
     // It will be false when one of the parents is a symlink (e.g. /dir/link/file.txt)

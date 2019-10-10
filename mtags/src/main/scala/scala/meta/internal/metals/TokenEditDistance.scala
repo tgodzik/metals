@@ -125,7 +125,7 @@ final class TokenEditDistance private (
             }
           Some(revised.toLSP)
         case (start, end) =>
-          scribe.warn(s"stale range: $start $end")
+          // TODO: scribe.warn(s"stale range: $start $end")
           None
       }
     }
