@@ -20,7 +20,6 @@ import scala.meta.internal.mtags.GlobalSymbolIndex
 import scala.meta.internal.metals.BuildTargets
 import scala.meta.internal.metals.Buffers
 import scala.meta.internal.metals.DefinitionProvider
-import scala.meta.internal.metals.TokenEditDistance
 import scala.meta.internal.semanticdb.Scala._
 import scala.meta.internal.semanticdb.TypeSignature
 import scala.collection.mutable
@@ -238,7 +237,7 @@ final class ImplementationProvider(
         source
       )
       range <- implOccurrence.range
-      distance = TokenEditDistance.fromBuffer(
+      distance = Buffers.tokenEditDistance(
         source,
         parentDoc.text,
         buffer
@@ -279,8 +278,9 @@ final class ImplementationProvider(
       }
     }
 
-    import TokenEditDistance.fromBuffer
+    import Buffers.tokenEditDistance
     val allLocations = new ConcurrentLinkedQueue[Location]
+
     for {
       classContext <- inheritanceContext.toIterable
       plainParentSymbol <- classContext.findSymbol(symbol).toIterable
@@ -295,7 +295,7 @@ final class ImplementationProvider(
       locations = locationsByFile(file)
       implPath = AbsolutePath(file)
       implDocument <- findSemanticdb(implPath).toIterable
-      distance = fromBuffer(implPath, implDocument.text, buffer)
+      distance = tokenEditDistance(implPath, implDocument.text, buffer)
       implLocation <- locations
       implReal = implLocation.toRealNames(symbolClass, translateKey = true)
       implSymbol <- findImplementationSymbol(

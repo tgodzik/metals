@@ -1,11 +1,11 @@
 package scala.meta.internal.pc
 
 import scala.meta.internal.mtags.MtagsEnrichments._
+import scala.meta.internal.jdk.CollectionConverters._
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
 import org.eclipse.lsp4j.CompletionList
 import org.eclipse.lsp4j.InsertTextFormat
-import scala.meta.internal.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.meta.pc.OffsetParams
 import scala.meta.pc.SymbolSearch
@@ -41,7 +41,7 @@ class CompletionProvider(
   def completions(): CompletionList = {
     val unit = addCompilationUnit(
       code = params.text,
-      filename = params.filename,
+      filename = params.uri().toString(),
       cursor = Some(params.offset),
       cursorName = cursorName
     )
@@ -465,7 +465,7 @@ class CompletionProvider(
   def implementAll(): ju.List[l.TextEdit] = {
     val unit = addCompilationUnit(
       code = params.text,
-      filename = params.filename,
+      filename = params.uri().toString(),
       cursor = None
     )
     val pos = unit.position(params.offset)

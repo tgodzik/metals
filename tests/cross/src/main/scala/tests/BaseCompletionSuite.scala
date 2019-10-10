@@ -3,15 +3,16 @@ package tests
 import java.util.Collections
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionList
-import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.internal.metals.CompilerOffsetParams
 import scala.meta.internal.metals.EmptyCancelToken
 import scala.meta.internal.mtags.MtagsEnrichments._
+import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.pc.CancelToken
 import scala.collection.Seq
 import scala.meta.internal.metals.TextEdits
 import munit.TestOptions
 import munit.Location
+import java.nio.file.Paths
 
 abstract class BaseCompletionSuite extends BasePCSuite {
 
@@ -35,7 +36,12 @@ abstract class BaseCompletionSuite extends BasePCSuite {
   ): Seq[CompletionItem] = {
     val (code, offset) = params(original)
     val result = resolvedCompletions(
-      CompilerOffsetParams("file:/" + filename, code, offset, cancelToken)
+      CompilerOffsetParams(
+        Paths.get(filename).toUri(),
+        code,
+        offset,
+        cancelToken
+      )
     )
     result.getItems.asScala.sortBy(_.getSortText)
   }
@@ -124,7 +130,7 @@ abstract class BaseCompletionSuite extends BasePCSuite {
   }
 
   def check(
-      name: String,
+      name: TestOptions,
       original: String,
       expected: String,
       includeDocs: Boolean = false,
@@ -144,7 +150,7 @@ abstract class BaseCompletionSuite extends BasePCSuite {
       val out = new StringBuilder()
       val withPkg =
         if (original.contains("package") || !enablePackageWrap) original
-        else s"package ${scala.meta.Term.Name(name)}\n$original"
+        else s"package ${scala.meta.Term.Name(name.name)}\n$original"
       val baseItems = getItems(withPkg, filename)
       val items = topLines match {
         case Some(top) => baseItems.take(top)

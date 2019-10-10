@@ -142,13 +142,23 @@ final class Doctor(
       } else if (isSupportedScalaVersion(
           scalaVersion
         )) {
-        hint().capitalize
+        hint.capitalize
       } else if (isSupportedScalaBinaryVersion(scalaVersion)) {
-        s"Upgrade to Scala ${recommendedVersion(scalaVersion)} and " + hint()
+        val recommended = recommendedVersion(scalaVersion)
+        if (SemVer.isCompatibleVersion(scalaVersion, recommended)) {
+          s"Upgrade to Scala $recommended and " + hint
+        } else {
+          s"Scala $scalaVersion is not yet supported"
+        }
+
       } else {
-        s"Code navigation is not supported for this compiler version, upgrade to " +
-          s"Scala ${BuildInfo.scala212} or ${BuildInfo.scala211} and " +
-          s"run 'Build import' to enable code navigation."
+        val versionToUpgradeTo =
+          if (ScalaVersions.isScala3Version(scalaVersion)) {
+            s"Scala3 ${BuildInfo.scala3}"
+          } else {
+            s"Scala ${BuildInfo.scala212} or ${BuildInfo.scala211}"
+          }
+        s"Code navigation is not supported for this compiler version, upgrade to " + versionToUpgradeTo + " and " + hint
       }
     } else {
       val messages = ListBuffer.empty[String]
@@ -158,7 +168,7 @@ final class Doctor(
       } else if (!isLatestScalaVersion(scalaVersion)) {
         messages += s"Upgrade to Scala ${recommendedVersion(scalaVersion)} to enjoy the latest compiler improvements."
       }
-      if (!scala.scalac.isSourcerootDeclared) {
+      if (!scala.scalac.isSourcerootDeclared(scalaVersion)) {
         messages += s"Add the compiler option ${workspace.sourcerootOption} to ensure code navigation works."
       }
       messages.toList match {

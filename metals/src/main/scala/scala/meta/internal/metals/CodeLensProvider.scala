@@ -46,7 +46,7 @@ final class DebugCodeLensProvider(
         Nil
       case Some(textDocument) =>
         val distance =
-          TokenEditDistance.fromBuffer(path, textDocument.text, buffers)
+          Buffers.tokenEditDistance(path, textDocument.text, buffers)
 
         for {
           occurrence <- textDocument.occurrences

@@ -14,7 +14,6 @@ import scala.meta.inputs.Input
 import org.eclipse.lsp4j.{Position, Range}
 import scala.meta.internal.metals.Buffers
 import org.eclipse.lsp4j.Hover
-import scala.meta.internal.metals.TokenEditDistance
 import WorkspaceEditWorksheetPublisher._
 
 class WorkspaceEditWorksheetPublisher(buffers: Buffers)
@@ -34,7 +33,7 @@ class WorkspaceEditWorksheetPublisher(buffers: Buffers)
   override def hover(path: AbsolutePath, position: Position): Option[Hover] = {
     for {
       messages <- hoverMessages.get(path)
-      distance = TokenEditDistance.fromBuffer(
+      distance = Buffers.tokenEditDistance(
         path,
         messages.textSnapshot,
         buffers

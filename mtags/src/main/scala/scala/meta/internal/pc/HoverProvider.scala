@@ -6,8 +6,8 @@ import org.eclipse.lsp4j.MarkedString
 import scala.meta.internal.mtags.MtagsEnrichments._
 import scala.meta.pc.OffsetParams
 import scala.reflect.internal.{Flags => gf}
-import scala.meta.internal.jdk.CollectionConverters._
 import scala.util.control.NonFatal
+import scala.meta.internal.jdk.CollectionConverters._
 
 class HoverProvider(val compiler: MetalsGlobal, params: OffsetParams) {
   import compiler._
@@ -18,7 +18,7 @@ class HoverProvider(val compiler: MetalsGlobal, params: OffsetParams) {
     } else {
       val unit = addCompilationUnit(
         code = params.text(),
-        filename = params.filename(),
+        filename = params.uri().toString(),
         cursor = None
       )
       val pos = unit.position(params.offset())
