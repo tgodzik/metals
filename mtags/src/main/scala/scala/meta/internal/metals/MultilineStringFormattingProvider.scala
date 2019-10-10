@@ -24,6 +24,36 @@ final class MultilineStringFormattingProvider()(implicit ec: ExecutionContext) {
   private val space = " "
   private val stripMargin = "stripMargin"
 
+  def onTypeFormatting(
+      params: DocumentOnTypeFormattingParams,
+      source: String
+  ): Future[List[TextEdit]] = {
+    val range = new Range(params.getPosition, params.getPosition)
+    val doc = params.getTextDocument()
+    val newlineAdded = params.getCh() == "\n"
+    withToken(doc, source, range, newlineAdded) { (sourceText, position) =>
+      List(indent(sourceText, position.start, params.getPosition))
+    }
+  }
+
+  def onRangeFormatting(
+      params: DocumentRangeFormattingParams,
+      sourceText: String
+  ): Future[List[TextEdit]] = {
+    val source = params.getTextDocument.getUri.toAbsolutePath
+    val range = params.getRange()
+    val doc = params.getTextDocument()
+    withToken(doc, sourceText, range, newlineAdded = false) {
+      (sourceText, position) =>
+        val newText = indent(sourceText, position.start) + "|"
+        val lines = (range.getStart().getLine() + 1) to range.getEnd().getLine()
+        lines.map { line =>
+          val pos = new Position(line, 0)
+          new TextEdit(new Range(pos, pos), newText)
+        }.toList
+    }
+  }
+
   private def hasStripMarginSuffix(
       stringTokenIndex: Int,
       tokens: Tokens
@@ -120,6 +150,7 @@ final class MultilineStringFormattingProvider()(implicit ec: ExecutionContext) {
 
   private def withToken(
       textId: TextDocumentIdentifier,
+      sourceText: String,
       range: Range,
       newlineAdded: Boolean
   )(
@@ -127,7 +158,6 @@ final class MultilineStringFormattingProvider()(implicit ec: ExecutionContext) {
   ): Future[List[TextEdit]] = Future {
     val source = textId.getUri.toAbsolutePath
     if (source.exists) {
-      val sourceText = buffer.get(source).getOrElse("")
       val pos = range.getStart.toMeta(
         Input.VirtualFile(source.toString(), sourceText)
       )
@@ -141,30 +171,4 @@ final class MultilineStringFormattingProvider()(implicit ec: ExecutionContext) {
     } else Nil
   }
 
-  def format(
-      params: DocumentOnTypeFormattingParams
-  ): Future[List[TextEdit]] = {
-    val range = new Range(params.getPosition, params.getPosition)
-    val doc = params.getTextDocument()
-    val newlineAdded = params.getCh() == "\n"
-    withToken(doc, range, newlineAdded) { (sourceText, position) =>
-      List(indent(sourceText, position.start, params.getPosition))
-    }
-  }
-
-  def format(
-      params: DocumentRangeFormattingParams
-  ): Future[List[TextEdit]] = {
-    val source = params.getTextDocument.getUri.toAbsolutePath
-    val range = params.getRange()
-    val doc = params.getTextDocument()
-    withToken(doc, range, newlineAdded = false) { (sourceText, position) =>
-      val newText = indent(sourceText, position.start) + "|"
-      val lines = (range.getStart().getLine() + 1) to range.getEnd().getLine()
-      lines.map { line =>
-        val pos = new Position(line, 0)
-        new TextEdit(new Range(pos, pos), newText)
-      }.toList
-    }
-  }
 }

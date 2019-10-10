@@ -3,8 +3,10 @@ package scala.meta.internal.metals
 import scala.collection.concurrent.TrieMap
 import scala.meta._
 import scala.meta.internal.io.PathIO
-import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.mtags.MtagsEnrichments._
 import scala.meta.parsers.Parsed
+import org.eclipse.lsp4j.Diagnostic
+import org.eclipse.lsp4j.DiagnosticSeverity
 
 /**
  * Manages parsing of Scala source files into Scalameta syntax trees.
@@ -13,39 +15,49 @@ import scala.meta.parsers.Parsed
  *   similar as `Buffers` provides the current text content.
  * - publishes diagnostics for syntax errors.
  */
-final class Trees(buffers: Buffers, diagnostics: Diagnostics) {
+final class Trees() {
 
   private val trees = TrieMap.empty[AbsolutePath, Tree]
 
   def get(path: AbsolutePath): Option[Tree] =
     trees.get(path).orElse {
       // Fallback to parse without caching result.
-      parse(path).flatMap(_.toOption)
+      parse(path, path.readText).flatMap(_.toOption)
     }
 
-  def didClose(path: AbsolutePath): Unit = {
+  def didClose(path: AbsolutePath, text: String): Unit = {
     trees.remove(path)
-    diagnostics.onNoSyntaxError(path)
   }
 
-  def didChange(path: AbsolutePath): Unit = {
-    parse(path) match {
+  def didChange(path: AbsolutePath, text: String): List[Diagnostic] = {
+    parse(path, text) match {
       case Some(parsed) =>
         parsed match {
           case Parsed.Error(pos, message, _) =>
-            diagnostics.onSyntaxError(path, pos, message)
+            List(
+              new Diagnostic(
+                pos.toLSP,
+                message,
+                DiagnosticSeverity.Error,
+                "scalameta"
+              )
+            )
           case Parsed.Success(tree) =>
             trees(path) = tree
-            diagnostics.onNoSyntaxError(path)
+            List()
         }
       case None =>
         () // Unknown extension, do nothing.
+        List()
     }
   }
 
-  private def parse(path: AbsolutePath): Option[Parsed[Source]] = {
+  private def parse(
+      path: AbsolutePath,
+      text: String
+  ): Option[Parsed[Source]] = {
     dialect(path).map { d =>
-      val input = path.toInputFromBuffers(buffers)
+      val input = Input.VirtualFile(path.toString(), text)
       d(input).parse[Source]
     }
   }

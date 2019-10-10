@@ -179,18 +179,6 @@ object MetalsEnrichments extends MtagsEnrichments {
     }
   }
 
-  implicit class XtensionPositionLspInverse(pos: l.Position) {
-    def toMeta(input: m.Input): m.Position = {
-      m.Position.Range(
-        input,
-        pos.getLine,
-        pos.getCharacter,
-        pos.getLine,
-        pos.getCharacter
-      )
-    }
-  }
-
   implicit class XtensionDocumentSymbol(symbol: Seq[l.DocumentSymbol]) {
 
     def toSymbolInformation(uri: String): List[l.SymbolInformation] = {
@@ -284,10 +272,6 @@ object MetalsEnrichments extends MtagsEnrichments {
       new TextDocumentIdentifier(path.toURI.toString)
     }
 
-    def readText: String = {
-      FileIO.slurp(path, StandardCharsets.UTF_8)
-    }
-
     def isJar: Boolean = {
       val filename = path.toNIO.getFileName.toString
       filename.endsWith(".jar")
@@ -300,16 +284,6 @@ object MetalsEnrichments extends MtagsEnrichments {
       buffers.get(path) match {
         case Some(text) => Input.VirtualFile(path.toString(), text)
         case None => path.toInput
-      }
-    }
-
-    // Using [[Files.isSymbolicLink]] is not enough.
-    // It will be false when one of the parents is a symlink (e.g. /dir/link/file.txt)
-    def dealias: AbsolutePath = {
-      if (path.exists) { // cannot dealias non-existing path
-        AbsolutePath(path.toNIO.toRealPath())
-      } else {
-        path
       }
     }
 

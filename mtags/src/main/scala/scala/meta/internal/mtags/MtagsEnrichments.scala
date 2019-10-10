@@ -35,6 +35,7 @@ import scala.{meta => m}
 import org.eclipse.lsp4j.jsonrpc.messages.{Either => JEither}
 import scala.collection.convert.DecorateAsJava
 import scala.collection.convert.DecorateAsScala
+import java.net.URI
 
 object MtagsEnrichments extends MtagsEnrichments
 trait MtagsEnrichments extends DecorateAsJava with DecorateAsScala {
@@ -80,6 +81,20 @@ trait MtagsEnrichments extends DecorateAsJava with DecorateAsScala {
     }
   }
   implicit class XtensionAbsolutePathMetals(file: AbsolutePath) {
+
+    // Using [[Files.isSymbolicLink]] is not enough.
+    // It will be false when one of the parents is a symlink (e.g. /dir/link/file.txt)
+    def dealias: AbsolutePath = {
+      if (file.exists) { // cannot dealias non-existing path
+        AbsolutePath(file.toNIO.toRealPath())
+      } else {
+        file
+      }
+    }
+
+    def readText: String = {
+      FileIO.slurp(file, StandardCharsets.UTF_8)
+    }
 
     def filename: String = file.toNIO.filename
 
@@ -417,6 +432,18 @@ trait MtagsEnrichments extends DecorateAsJava with DecorateAsScala {
         index -= 1
       }
       index
+    }
+  }
+
+  implicit class XtensionPositionLspInverse(pos: l.Position) {
+    def toMeta(input: m.Input): m.Position = {
+      m.Position.Range(
+        input,
+        pos.getLine,
+        pos.getCharacter,
+        pos.getLine,
+        pos.getCharacter
+      )
     }
   }
 }
