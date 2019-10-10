@@ -103,10 +103,20 @@ class Compilers(
     }
 
   def didChange(path: AbsolutePath): Unit = {
-    loadCompiler(path, None).foreach { pc =>
-      pc.didChange(path.toURI, buffers.get(path))
+    val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
+    val input = path.toInputFromBuffers(buffers)
+    for {
+      ds <- pc.didChange(input.path, input.value).asScala
+    } {
+      ds.asScala.headOption match {
+        case None =>
+          diagnostics.onNoSyntaxError(path)
+        case Some(diagnostic) =>
+          diagnostics.onSyntaxError(path, diagnostic)
+      }
     }
   }
+
   def didCompile(report: CompileReport): Unit = {
     if (report.getErrors > 0) {
       cache.get(report.getTarget).foreach(_.restart())

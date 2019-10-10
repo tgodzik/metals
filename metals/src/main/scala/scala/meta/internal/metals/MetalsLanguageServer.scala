@@ -127,7 +127,7 @@ class MetalsLanguageServer(
   )
   private val indexingPromise = Promise[Unit]()
   val parseTrees = new BatchedFunction[AbsolutePath, Unit](
-    paths => CancelableFuture(paths.distinct.foreach(trees.didChange))
+    paths => CancelableFuture(paths.distinct.foreach(compilers.didChange))
   )
   private val onBuildChanged =
     BatchedFunction.fromFuture[AbsolutePath, BuildChange](

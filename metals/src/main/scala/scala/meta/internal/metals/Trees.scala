@@ -14,6 +14,7 @@ import scala.meta.parsers.Parsed
  * - publishes diagnostics for syntax errors.
  */
 final class Trees(buffers: Buffers, diagnostics: Diagnostics) {
+
   private val trees = TrieMap.empty[AbsolutePath, Tree]
 
   def get(path: AbsolutePath): Option[Tree] =
