@@ -251,8 +251,7 @@ class MetalsLanguageServer(
       () => treeView,
       buildTarget => focusedDocumentBuildTarget.get() == buildTarget
     )
-    trees = new Trees(buffers, diagnostics)
-    documentSymbolProvider = new DocumentSymbolProvider(trees)
+    // documentSymbolProvider = new DocumentSymbolProvider(trees)
     bloopInstall = register(
       new BloopInstall(
         workspace,
@@ -881,7 +880,7 @@ class MetalsLanguageServer(
   ): CompletableFuture[util.List[TextEdit]] =
     CancelTokens.future { _ =>
       multilineStringFormattingProvider
-        .format(params)
+        .onTypeFormatting(params)
         .map(_.asJava)
     }
 
@@ -891,7 +890,7 @@ class MetalsLanguageServer(
   ): CompletableFuture[util.List[TextEdit]] =
     CancelTokens.future { _ =>
       multilineStringFormattingProvider
-        .format(params)
+        .rangeFormatting(params)
         .map(_.asJava)
     }
 

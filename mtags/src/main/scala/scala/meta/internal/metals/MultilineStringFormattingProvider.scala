@@ -36,7 +36,7 @@ final class MultilineStringFormattingProvider()(implicit ec: ExecutionContext) {
     }
   }
 
-  def onRangeFormatting(
+  def rangeFormatting(
       params: DocumentRangeFormattingParams,
       sourceText: String
   ): Future[List[TextEdit]] = {
