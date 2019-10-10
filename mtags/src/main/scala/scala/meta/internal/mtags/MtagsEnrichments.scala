@@ -24,6 +24,7 @@ import scala.meta.inputs.Input
 import scala.meta.inputs.Position
 import scala.meta.internal.io.FileIO
 import scala.meta.internal.io.PathIO
+import scala.meta.internal.trees.Origin
 import scala.meta.internal.pc.CompletionItemData
 import scala.meta.internal.semanticdb.Language
 import scala.meta.internal.semanticdb.SymbolInformation.{Kind => k}
@@ -80,7 +81,7 @@ trait MtagsEnrichments extends DecorateAsJava with DecorateAsScala {
       root(file)
     }
   }
-  implicit class XtensionAbsolutePathMetals(file: AbsolutePath) {
+  implicit class XtensionAbsolutePathMtags(file: AbsolutePath) {
 
     // Using [[Files.isSymbolicLink]] is not enough.
     // It will be false when one of the parents is a symlink (e.g. /dir/link/file.txt)
@@ -445,5 +446,27 @@ trait MtagsEnrichments extends DecorateAsJava with DecorateAsScala {
         pos.getCharacter
       )
     }
+  }
+
+  implicit class XtensionTreeTokenStream(tree: m.Tree) {
+    def leadingTokens: Iterator[m.Token] = tree.origin match {
+      case Origin.Parsed(input, _, pos) =>
+        val tokens = input.tokenize.get
+        tokens.slice(0, pos.start - 1).reverseIterator
+      case _ => Iterator.empty
+    }
+
+    def trailingTokens: Iterator[m.Token] = tree.origin match {
+      case Origin.Parsed(input, _, pos) =>
+        val tokens = input.tokenize.get
+        tokens.slice(pos.end + 1, tokens.length).iterator
+      case _ => Iterator.empty
+    }
+
+    def findFirstLeading(predicate: m.Token => Boolean): Option[m.Token] =
+      leadingTokens.find(predicate)
+
+    def findFirstTrailing(predicate: m.Token => Boolean): Option[m.Token] =
+      trailingTokens.find(predicate)
   }
 }

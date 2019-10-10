@@ -213,7 +213,9 @@ lazy val mtags = project
       "org.jsoup" % "jsoup" % "1.11.3", // for extracting HTML from javadocs
       "org.lz4" % "lz4-java" % "1.6.0", // for streaming hashing when indexing classpaths
       "com.lihaoyi" %% "geny" % genyVersion.value,
-      "org.scalameta" % "semanticdb-scalac-core" % V.scalameta cross CrossVersion.full
+      "org.scalameta" % "semanticdb-scalac-core" % V.scalameta cross CrossVersion.full,
+      // for token edit-distance used by goto definition
+      "com.googlecode.java-diff-utils" % "diffutils" % "1.3.0"
     ),
     libraryDependencies ++= {
       if (isCI) Nil
@@ -258,8 +260,6 @@ lazy val metals = project
       "com.zaxxer" % "nuprocess" % "1.2.4",
       "net.java.dev.jna" % "jna" % "4.5.1",
       "net.java.dev.jna" % "jna-platform" % "4.5.1",
-      // for token edit-distance used by goto definition
-      "com.googlecode.java-diff-utils" % "diffutils" % "1.3.0",
       // for BSP
       "org.scala-sbt.ipcsocket" % "ipcsocket" % "1.0.0",
       "ch.epfl.scala" % "bsp4j" % V.bsp,

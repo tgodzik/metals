@@ -292,11 +292,11 @@ object MetalsEnrichments extends MtagsEnrichments {
     }
 
     def createDirectories(): AbsolutePath = {
-      AbsolutePath(Files.createDirectories(dealias.toNIO))
+      AbsolutePath(Files.createDirectories(path.dealias.toNIO))
     }
 
     def delete(): Unit = {
-      Files.delete(dealias.toNIO)
+      Files.delete(path.dealias.toNIO)
     }
 
     def writeText(text: String): Unit = {
@@ -469,25 +469,4 @@ object MetalsEnrichments extends MtagsEnrichments {
       promise.tryFailure(new CancellationException())
   }
 
-  implicit class XtensionTreeTokenStream(tree: Tree) {
-    def leadingTokens: Iterator[Token] = tree.origin match {
-      case Origin.Parsed(input, _, pos) =>
-        val tokens = input.tokenize.get
-        tokens.slice(0, pos.start - 1).reverseIterator
-      case _ => Iterator.empty
-    }
-
-    def trailingTokens: Iterator[Token] = tree.origin match {
-      case Origin.Parsed(input, _, pos) =>
-        val tokens = input.tokenize.get
-        tokens.slice(pos.end + 1, tokens.length).iterator
-      case _ => Iterator.empty
-    }
-
-    def findFirstLeading(predicate: Token => Boolean): Option[Token] =
-      leadingTokens.find(predicate)
-
-    def findFirstTrailing(predicate: Token => Boolean): Option[Token] =
-      trailingTokens.find(predicate)
-  }
 }
