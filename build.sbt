@@ -194,6 +194,7 @@ lazy val dtags = project
     )
   )
   .dependsOn(interfaces)
+  .disablePlugins(ScalafixPlugin)
 
 lazy val mtags = project
   .settings(

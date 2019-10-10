@@ -3,7 +3,6 @@ package tests
 import java.util.Collections
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionList
-import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.internal.metals.CompilerOffsetParams
 import scala.meta.internal.metals.EmptyCancelToken
 import scala.meta.internal.mtags.MtagsEnrichments._

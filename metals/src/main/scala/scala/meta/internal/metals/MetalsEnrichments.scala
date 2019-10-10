@@ -23,15 +23,12 @@ import scala.concurrent.Future
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.Promise
-import scala.meta.Tree
 import scala.meta.inputs.Input
 import scala.meta.internal.mtags.MtagsEnrichments
 import scala.meta.internal.semanticdb.Scala.Descriptor
 import scala.meta.internal.semanticdb.Scala.Symbols
-import scala.meta.internal.trees.Origin
 import scala.meta.internal.{semanticdb => s}
 import scala.meta.io.AbsolutePath
-import scala.meta.tokens.Token
 import scala.util.Properties
 import scala.{meta => m}
 import java.nio.file.StandardOpenOption
