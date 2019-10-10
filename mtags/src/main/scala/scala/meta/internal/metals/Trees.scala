@@ -25,7 +25,7 @@ final class Trees() {
       parse(path, path.readText).flatMap(_.toOption)
     }
 
-  def didClose(path: AbsolutePath, text: String): Unit = {
+  def didClose(path: AbsolutePath): Unit = {
     trees.remove(path)
   }
 

@@ -324,10 +324,10 @@ class MetalsLanguageServer(
           Nil
       }
     )
-    multilineStringFormattingProvider = new MultilineStringFormattingProvider(
-      semanticdbs,
-      buffers
-    )
+    // multilineStringFormattingProvider = new MultilineStringFormattingProvider(
+    //   semanticdbs,
+    //   buffers
+    // )
     referencesProvider = new ReferenceProvider(
       workspace,
       semanticdbs,
@@ -618,7 +618,7 @@ class MetalsLanguageServer(
     fingerprints.add(path, FileIO.slurp(path, charset))
     // Update in-memory buffer contents from LSP client
     buffers.put(path, params.getTextDocument.getText)
-    trees.didChange(path)
+    trees.didChange(path, params.getTextDocument.getText)
 
     packageProvider
       .workspaceEdit(path)
@@ -880,7 +880,15 @@ class MetalsLanguageServer(
   ): CompletableFuture[util.List[TextEdit]] =
     CancelTokens.future { _ =>
       multilineStringFormattingProvider
-        .onTypeFormatting(params)
+        .onTypeFormatting(
+          params,
+          params
+            .getTextDocument()
+            .getUri()
+            .toAbsolutePath
+            .toInputFromBuffers(buffers)
+            .value
+        )
         .map(_.asJava)
     }
 
@@ -890,7 +898,15 @@ class MetalsLanguageServer(
   ): CompletableFuture[util.List[TextEdit]] =
     CancelTokens.future { _ =>
       multilineStringFormattingProvider
-        .rangeFormatting(params)
+        .rangeFormatting(
+          params,
+          params
+            .getTextDocument()
+            .getUri()
+            .toAbsolutePath
+            .toInputFromBuffers(buffers)
+            .value
+        )
         .map(_.asJava)
     }
 
