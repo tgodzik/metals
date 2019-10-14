@@ -618,7 +618,7 @@ class MetalsLanguageServer(
     fingerprints.add(path, FileIO.slurp(path, charset))
     // Update in-memory buffer contents from LSP client
     buffers.put(path, params.getTextDocument.getText)
-    trees.didChange(path, params.getTextDocument.getText)
+    compilers.didChange(path)
 
     packageProvider
       .workspaceEdit(path)
@@ -704,7 +704,7 @@ class MetalsLanguageServer(
         val path = params.getTextDocument.getUri.toAbsolutePath
         buffers.put(path, change.getText)
         compilers.didChange(path)
-        // diagnostics.didChange(path)
+        diagnostics.didChange(path)
         parseTrees(path).asJava
     }
 
@@ -712,7 +712,8 @@ class MetalsLanguageServer(
   def didClose(params: DidCloseTextDocumentParams): Unit = {
     val path = params.getTextDocument.getUri.toAbsolutePath
     buffers.remove(path)
-    trees.didClose(path)
+    // TODO this should be forwarded within compiler
+    // trees.didClose(path)
   }
 
   @JsonNotification("textDocument/didSave")

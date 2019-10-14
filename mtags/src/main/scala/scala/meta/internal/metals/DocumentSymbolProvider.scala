@@ -17,9 +17,10 @@ import scala.meta.transversers.SimpleTraverser
 class DocumentSymbolProvider(trees: Trees) {
 
   def documentSymbols(
-      path: AbsolutePath
+      filename: String,
+      code: String
   ): util.List[DocumentSymbol] = {
-    trees.get(path) match {
+    trees.get(filename, code) match {
       case Some(tree) =>
         new SymbolTraverser().symbols(tree)
       case None =>

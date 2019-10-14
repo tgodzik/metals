@@ -7,6 +7,7 @@ import scala.meta.internal.mtags.MtagsEnrichments._
 import scala.meta.parsers.Parsed
 import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.DiagnosticSeverity
+import java.nio.file.Paths
 
 /**
  * Manages parsing of Scala source files into Scalameta syntax trees.
@@ -17,20 +18,20 @@ import org.eclipse.lsp4j.DiagnosticSeverity
  */
 final class Trees() {
 
-  private val trees = TrieMap.empty[AbsolutePath, Tree]
+  private val trees = TrieMap.empty[String, Tree]
 
-  def get(path: AbsolutePath): Option[Tree] =
-    trees.get(path).orElse {
+  def get(fileName: String, code: String): Option[Tree] =
+    trees.get(fileName).orElse {
       // Fallback to parse without caching result.
-      parse(path, path.readText).flatMap(_.toOption)
+      parse(fileName, code).flatMap(_.toOption)
     }
 
-  def didClose(path: AbsolutePath): Unit = {
-    trees.remove(path)
+  def didClose(fileName: String): Unit = {
+    trees.remove(fileName)
   }
 
-  def didChange(path: AbsolutePath, text: String): List[Diagnostic] = {
-    parse(path, text) match {
+  def didChange(fileName: String, text: String): List[Diagnostic] = {
+    parse(fileName, text) match {
       case Some(parsed) =>
         parsed match {
           case Parsed.Error(pos, message, _) =>
@@ -43,7 +44,7 @@ final class Trees() {
               )
             )
           case Parsed.Success(tree) =>
-            trees(path) = tree
+            trees(fileName) = tree
             List()
         }
       case None =>
@@ -53,16 +54,17 @@ final class Trees() {
   }
 
   private def parse(
-      path: AbsolutePath,
+      fileName: String,
       text: String
   ): Option[Parsed[Source]] = {
-    dialect(path).map { d =>
-      val input = Input.VirtualFile(path.toString(), text)
+    dialect(fileName).map { d =>
+      val input = Input.VirtualFile(fileName, text)
       d(input).parse[Source]
     }
   }
-  private def dialect(path: AbsolutePath): Option[Dialect] = {
-    Option(PathIO.extension(path.toNIO)).collect {
+  private def dialect(fileName: String): Option[Dialect] = {
+    // TODO check if this works
+    Option(PathIO.extension(Paths.get(fileName))).collect {
       case "scala" => dialects.Scala
       case "sbt" => dialects.Sbt
       case "sc" => dialects.Sbt

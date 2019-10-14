@@ -17,6 +17,8 @@ case class PresentationCompilerConfigImpl(
     isCompletionItemDetailEnabled: Boolean = true,
     isCompletionItemDocumentationEnabled: Boolean = true,
     isHoverDocumentationEnabled: Boolean = true,
+    // TODO this should be take from InitParams
+    isFoldOnlyLines: Boolean = false,
     isSignatureHelpDocumentationEnabled: Boolean = true,
     isCompletionItemResolve: Boolean = true,
     timeoutDelay: Long = 20,

@@ -30,6 +30,8 @@ import java.{util => ju}
 import org.eclipse.lsp4j.Diagnostic
 import scala.meta.pc.VirtualFileParams
 import org.eclipse.lsp4j.FoldingRange
+import scala.meta.internal.metals.FoldingRangeProvider
+import scala.meta.internal.metals.Trees
 
 case class ScalaPresentationCompiler(
     buildTargetIdentifier: String = "",
@@ -41,20 +43,35 @@ case class ScalaPresentationCompiler(
     config: PresentationCompilerConfig = PresentationCompilerConfigImpl()
 ) extends PresentationCompiler {
   val logger = Logger.getLogger(classOf[ScalaPresentationCompiler].getName)
+
+  val trees = new Trees
+  val foldingRangeProvider =
+    new FoldingRangeProvider(trees, config.isFoldOnlyLines())
+
   override def withSearch(search: SymbolSearch): PresentationCompiler =
     copy(search = search)
+
   override def didChange(
-      filename: String,
-      code: String
-  ): CompletableFuture[ju.List[Diagnostic]] =
-    CompletableFuture.completedFuture(ju.Collections.emptyList())
+      params: VirtualFileParams
+  ): CompletableFuture[ju.List[Diagnostic]] = {
+    CompletableFuture.completedFuture(
+      trees.didChange(params.filename(), params.text()).asJava
+    )
+  }
+
   def foldingRange(
       params: VirtualFileParams
-  ): CompletableFuture[ju.List[FoldingRange]] = ???
+  ): CompletableFuture[ju.List[FoldingRange]] = {
+    CompletableFuture.completedFuture(
+      foldingRangeProvider.getRangedFor(params.filename, params.text())
+    )
+  }
+
   override def withExecutorService(
       executorService: ExecutorService
   ): PresentationCompiler =
     copy(ec = ExecutionContext.fromExecutorService(executorService))
+
   override def withScheduledExecutorService(
       sh: ScheduledExecutorService
   ): PresentationCompiler =

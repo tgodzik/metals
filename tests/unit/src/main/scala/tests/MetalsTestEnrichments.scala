@@ -22,12 +22,18 @@ import scala.meta.internal.metals.WorkspaceSymbolProvider
 import scala.meta.internal.{semanticdb => s}
 import scala.meta.io.Classpath
 import scala.{meta => m}
+import scala.meta.io.AbsolutePath
 
 /**
  *  Equivalent to scala.meta.internal.metals.MetalsEnrichments
  *  but only for tests
  */
 object MetalsTestEnrichments {
+
+  implicit class XtensionTestAbsolutePath(path: AbsolutePath) {
+    def text: String = Files.readAllLines(path.toNIO).asScala.mkString("\n")
+  }
+
   implicit class XtensionTestClasspath(classpath: Classpath) {
     def bytesSize: String = {
       val bytes = classpath.entries.foldLeft(0L) {

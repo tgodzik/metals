@@ -114,10 +114,15 @@ class Compilers(
       params: FoldingRangeRequestParams,
       token: CancelToken
   ): Future[ju.List[FoldingRange]] = {
-    val sourceFile = params.getTextDocument.getUri.toAbsolutePath
-    // foldingRangeProvider.getRangedFor(sourceFile)
-    ???
+    val path = params.getTextDocument.getUri.toAbsolutePath
+    val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
+    val input = path.toInputFromBuffers(buffers)
+    pc.foldingRange(
+        CompilerVirtualFileParams(path.toNIO.filename, input.value)
+      )
+      .asScala
   }
+
   def onTypeFormatting(
       params: DocumentOnTypeFormattingParams,
       token: CancelToken
@@ -139,7 +144,9 @@ class Compilers(
     val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
     val input = path.toInputFromBuffers(buffers)
     for {
-      ds <- pc.didChange(input.path, input.value).asScala
+      ds <- pc
+        .didChange(CompilerVirtualFileParams(path.toNIO.filename, input.value))
+        .asScala
     } {
       ds.asScala.headOption match {
         case None =>
@@ -222,6 +229,7 @@ class Compilers(
     }.getOrElse {
       Future.successful(Option.empty)
     }
+
   def definition(
       params: TextDocumentPositionParams,
       token: CancelToken
@@ -245,6 +253,7 @@ class Compilers(
           )
         }
     }.getOrElse(Future.successful(DefinitionResult.empty))
+
   def signatureHelp(
       params: TextDocumentPositionParams,
       token: CancelToken,

@@ -59,6 +59,12 @@ public interface PresentationCompilerConfig {
      */
     boolean isHoverDocumentationEnabled();
 
+
+    /**
+     * Returns true if the result from <code>textDocument/foldingRange</code> should only use lines for folding.
+     */
+    boolean isFoldOnlyLines();
+    
     /**
      * Returns true if the <code>SignatureHelp.documentation</code> field should be populated.
      */

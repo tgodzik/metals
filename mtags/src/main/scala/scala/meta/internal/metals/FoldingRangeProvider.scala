@@ -6,21 +6,17 @@ import org.eclipse.lsp4j.FoldingRange
 import org.eclipse.lsp4j.InitializeParams
 import scala.meta.inputs.Position
 import scala.meta.internal.metals.FoldingRangeProvider._
-import scala.meta.io.AbsolutePath
 
 final class FoldingRangeProvider(
     val trees: Trees,
-    val buffers: Buffers,
     foldOnlyLines: Boolean
 ) {
 
-  def getRangedFor(path: AbsolutePath): util.List[FoldingRange] = {
+  def getRangedFor(fileName: String, code: String): util.List[FoldingRange] = {
     trees
-      .get(path)
+      .get(fileName, code)
       .map(tree => {
-        val distance =
-          TokenEditDistance.fromBuffer(path, tree.pos.input.text, buffers)
-        val extractor = new FoldingRangeExtractor(distance, foldOnlyLines)
+        val extractor = new FoldingRangeExtractor(foldOnlyLines)
         extractor.extract(tree)
       })
       .getOrElse(util.Collections.emptyList())
@@ -32,7 +28,6 @@ object FoldingRangeProvider {
 
   def apply(
       trees: Trees,
-      buffers: Buffers,
       params: InitializeParams
   ): FoldingRangeProvider = {
     val settings = for {
@@ -45,7 +40,7 @@ object FoldingRangeProvider {
       .map(_.getLineFoldingOnly)
       .contains(true)
 
-    new FoldingRangeProvider(trees, buffers, foldOnlyLines)
+    new FoldingRangeProvider(trees, foldOnlyLines)
   }
 }
 

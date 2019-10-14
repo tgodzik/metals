@@ -13,7 +13,6 @@ import scala.meta.tokens.Token
 import scala.meta.tokens.Token.KwMatch
 
 final class FoldingRangeExtractor(
-    distance: TokenEditDistance,
     foldOnlyLines: Boolean
 ) {
   private val spanThreshold = 3
@@ -30,13 +29,9 @@ final class FoldingRangeExtractor(
     if (span(tree.pos) > spanThreshold) {
       val newEnclosing = tree match {
         case Foldable(pos) if span(enclosing) - span(pos) > spanThreshold =>
-          distance.toRevised(pos.toLSP) match {
-            case Some(revisedPos) =>
-              val range = createRange(revisedPos)
-              ranges.add(Region, range)
-              pos
-            case None => enclosing
-          }
+          val range = createRange(pos.toLSP)
+          ranges.add(Region, range)
+          pos
         case _ => enclosing
       }
 

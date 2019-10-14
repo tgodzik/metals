@@ -69,8 +69,11 @@ public abstract class PresentationCompiler {
     /**
      * The text contents of the fiven file changed.
      */
-    public abstract CompletableFuture<List<Diagnostic>> didChange(String filename, String code);
+    public abstract CompletableFuture<List<Diagnostic>> didChange(VirtualFileParams params);
 
+    /**
+     * Ranges where the document can be collapsed.
+     */
     public abstract CompletableFuture<List<FoldingRange>> foldingRange(VirtualFileParams params);
 
     /**
