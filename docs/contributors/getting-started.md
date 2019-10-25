@@ -4,7 +4,7 @@ title: Contributing to Metals
 ---
 
 Whenever you are stuck or unsure, please open an issue or
-[ask on Gitter](https://gitter.im/scalameta/metals). This project follows
+[ask on Discord](https://discordapp.com/invite/RFpSVth). This project follows
 [Scalameta's contribution guidelines](https://github.com/scalameta/scalameta/blob/master/CONTRIBUTING.md).
 
 ## Requirements
@@ -31,8 +31,8 @@ You will need the following applications installed:
 This git repository has a pre-push hook to run Scalafmt.
 
 The CI also uses Scalafix to assert that there a no unused imports, to
-automatically remove unused imports run `sbt scalafixAll`. We don't run
-Scalafix as a pre-push git hook since starting sbt takes a long time.
+automatically remove unused imports run `sbt scalafixAll`. We don't run Scalafix
+as a pre-push git hook since starting sbt takes a long time.
 
 ## Related projects
 
@@ -69,8 +69,8 @@ sbt
 ### Manually testing a `LspSuite`
 
 Every test suite that extends `LspSuite` generates a workspace directory under
-`tests/unit/target/e2e/$suitename/$testname`. To debug why a `LspSuite` might
-be failing, run the test once and then open it directly in your editor. For
+`tests/unit/target/e2e/$suitename/$testname`. To debug why a `LspSuite` might be
+failing, run the test once and then open it directly in your editor. For
 example, for the test case `"deprecated-scala"` in `WarningsLspSuite` run the
 following command:
 

@@ -7,14 +7,13 @@ sidebar_label: Overview
 Metals works with the following build tools with varying degree of
 functionality.
 
-| Build tool | Installation | Goto library dependencies | Find references      |
-| ---------- | :----------: | :-----------------------: | :------------------: |
-| sbt        |  Automatic   |      Automatic            |     Automatic        |
-| Bloop      |  Automatic   |    Semi-automatic         |   Semi-automatic     |
-| Maven      |  Automatic   |      Automatic            |   Semi-automatic     |
-| Gradle     |  Automatic   |      Automatic            |     Automatic        |
-| Mill       |  Automatic   |      Automatic            |     Automatic        |
-
+| Build tool | Installation | Goto library dependencies | Find references |
+| ---------- | :----------: | :-----------------------: | :-------------: |
+| sbt        |  Automatic   |         Automatic         |    Automatic    |
+| Bloop      |  Automatic   |      Semi-automatic       |    Automatic    |
+| Maven      |  Automatic   |         Automatic         |    Automatic    |
+| Gradle     |  Automatic   |         Automatic         |    Automatic    |
+| Mill       |  Automatic   |         Automatic         |    Automatic    |
 
 ## Installation
 
@@ -24,27 +23,21 @@ installation start the Metals language server in the root directory of your
 build.
 
 **Manual**: setting up Metals requires a few manual steps to generate
-[Bloop](https://scalacenter.github.io/bloop) JSON files. In addition to normal
-Bloop installation, Metals requires that the project sources are compiled with
-the
-[semanticdb-scalac](https://scalameta.org/docs/semanticdb/guide.html#producing-semanticdb)
-compiler plugin and `-Yrangepos` option enabled.
+[Bloop](https://scalacenter.github.io/bloop) JSON files.
 
 ## Goto library dependencies
 
-**Automatic**: it is possible to navigate Scala+Java library dependencies using "Goto
-definition".
+**Automatic**: it is possible to navigate Scala+Java library dependencies using
+"Goto definition".
 
-**Semi-automatic**: navigation in library dependency sources works as
-long as the
+**Semi-automatic**: navigation in library dependency sources works as long as
+the
 [Bloop JSON files](https://scalacenter.github.io/bloop/docs/configuration-format/)
 are populated with `*-sources.jar`.
 
 ## Find references
 
 **Automatic**: it is possible to find all references to a symbol in the project
-
-**Semi-automatic**: it is possible to 'Find symbol references' as soon the SemanticDB compiler plugin is manually enabled in the build, check separate build tool pages for details.
 
 ## Integrating a new build tool
 
