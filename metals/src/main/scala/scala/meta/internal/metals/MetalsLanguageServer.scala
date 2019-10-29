@@ -45,6 +45,7 @@ import scala.meta.tokenizers.TokenizeException
 import scala.util.control.NonFatal
 import scala.util.Success
 import com.google.gson.JsonPrimitive
+import scala.meta.internal.rename.RenameProvider
 
 class MetalsLanguageServer(
     ec: ExecutionContextExecutorService,
@@ -152,6 +153,7 @@ class MetalsLanguageServer(
   private var definitionProvider: DefinitionProvider = _
   private var semanticDBIndexer: SemanticdbIndexer = _
   private var implementationProvider: ImplementationProvider = _
+  private var renameProvider: RenameProvider = _
   private var documentHighlightProvider: DocumentHighlightProvider = _
   private var formattingProvider: FormattingProvider = _
   private var multilineStringFormattingProvider
@@ -340,6 +342,17 @@ class MetalsLanguageServer(
       buffers,
       definitionProvider
     )
+    renameProvider = new RenameProvider(
+      referencesProvider,
+      implementationProvider,
+      definitionProvider,
+      semanticdbs,
+      definitionIndex,
+      workspace,
+      languageClient,
+      buffers,
+      compilations
+    )
     semanticDBIndexer =
       new SemanticdbIndexer(referencesProvider, implementationProvider)
     documentHighlightProvider = new DocumentHighlightProvider(
@@ -429,6 +442,7 @@ class MetalsLanguageServer(
       capabilities.setImplementationProvider(true)
       capabilities.setHoverProvider(true)
       capabilities.setReferencesProvider(true)
+      capabilities.setRenameProvider(true)
       capabilities.setDocumentHighlightProvider(true)
       capabilities.setDocumentOnTypeFormattingProvider(
         new DocumentOnTypeFormattingOptions("\n")
@@ -885,8 +899,7 @@ class MetalsLanguageServer(
       params: RenameParams
   ): CompletableFuture[WorkspaceEdit] =
     CancelTokens { _ =>
-      scribe.warn("textDocument/rename is not supported.")
-      null
+      renameProvider.rename(params)
     }
 
   @JsonRequest("textDocument/references")

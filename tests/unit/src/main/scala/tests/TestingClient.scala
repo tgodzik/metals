@@ -38,6 +38,7 @@ import scala.meta.internal.builds.MillBuildTool
 import scala.meta.internal.metals.ClientCommands
 import scala.meta.internal.metals.NoopLanguageClient
 import scala.meta.internal.tvp.TreeViewDidChangeParams
+import scala.meta.internal.metals.TextEdits
 
 /**
  * Fake LSP client that responds to notifications/requests initiated by the server.
@@ -105,6 +106,7 @@ final class TestingClient(workspace: AbsolutePath, buffers: Buffers)
   def workspaceClientCommands: List[String] = {
     clientCommands.asScala.toList.map(_.getCommand)
   }
+
   def statusBarHistory: String = {
     statusParams.asScala
       .map { params =>
