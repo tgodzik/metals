@@ -18,6 +18,7 @@ import scala.meta.io.AbsolutePath
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 import scala.meta.internal.semanticdb.SymbolOccurrence
+import org.eclipse.lsp4j.Position
 
 /**
  * Implements goto definition that works even in code that doesn't parse.
@@ -108,11 +109,19 @@ final class DefinitionProvider(
       dirtyPosition.getPosition.getCharacter
     )
 
+    def mtagsOccurrence(queryPosition: Position) = {
+      Mtags
+        .allToplevels(source.toInput)
+        .occurrences
+        .find(_.encloses(queryPosition))
+    }
+
     // Find matching symbol occurrence in SemanticDB snapshot
     val occurrence = for {
       queryPosition <- snapshotPosition.toPosition(dirtyPosition.getPosition)
       occurrence <- snapshot.occurrences
         .find(_.encloses(queryPosition, true))
+        .orElse(mtagsOccurrence(queryPosition))
     } yield occurrence
 
     ResolvedSymbolOccurrence(sourceDistance, occurrence)

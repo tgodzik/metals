@@ -259,9 +259,11 @@ final class ReferenceProvider(
 
     for {
       reference <- snapshot.occurrences
+      _ = pprint.log(reference)
       if isSymbol(reference.symbol)
       if !reference.role.isDefinition || isIncludeDeclaration
       range <- reference.range.toList
+
     } add(range)
 
     for {

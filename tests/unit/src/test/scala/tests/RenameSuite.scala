@@ -315,20 +315,20 @@ object RenameSuite extends BaseLspSuite("rename") {
   )
 
   // currently not working due to issues in SemanticDB
-  // renamed(
-  //   "macro-annotation",
-  //   """|/a/src/main/scala/a/Main.scala
-  //      |package a
-  //      |import io.circe.generic.JsonCodec
-  //      |trait LivingBeing
-  //      |@JsonCodec sealed trait <<An@@imal>> extends LivingBeing
-  //      |object Animal {
-  //      |  case object Dog extends <<Animal>>
-  //      |  case object Cat extends <<Animal>>
-  //      |}
-  //      |""".stripMargin,
-  //   newName = "Tree"
-  // )
+  renamed(
+    "macro-annotation",
+    """|/a/src/main/scala/a/Main.scala
+       |package a
+       |import io.circe.generic.JsonCodec
+       |trait LivingBeing
+       |@JsonCodec sealed trait <<An@@imal>> extends LivingBeing
+       |object Animal {
+       |  case object Dog extends <<Animal>>
+       |  case object Cat extends <<Animal>>
+       |}
+       |""".stripMargin,
+    newName = "Tree"
+  )
   // renamed(
   //   "classof",
   //   """|/a/src/main/scala/a/Main.scala
