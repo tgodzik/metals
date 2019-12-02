@@ -12,44 +12,44 @@ abstract class BaseWorksheetLspSuite(scalaVersion: String)
     Some(ClientExperimentalCapabilities(decorationProvider = true))
   override def userConfig: UserConfiguration =
     super.userConfig.copy(worksheetScreenWidth = 40, worksheetCancelTimeout = 1)
-  if (!BaseSuite.isWindows)
-    testAsync("completion") {
-      for {
-        _ <- server.initialize(
-          s"""
-             |/metals.json
-             |{
-             |  "a": {
-             |    "scalaVersion": "$scalaVersion",
-             |    "libraryDependencies": ["com.lihaoyi::sourcecode:0.1.8"]
-             |  }
-             |}
-             |/a/src/main/scala/foo/Main.worksheet.sc
-             |identity(42)
-             |val name = sourcecode.Name.generate.value
-             |""".stripMargin
-        )
-        _ <- server.didOpen("a/src/main/scala/foo/Main.worksheet.sc")
-        _ <- server.didSave("a/src/main/scala/foo/Main.worksheet.sc")(identity)
-        identity <- server.completion(
-          "a/src/main/scala/foo/Main.worksheet.sc",
-          "identity@@"
-        )
-        _ = assertNoDiff(identity, "identity[A](x: A): A")
-        generate <- server.completion(
-          "a/src/main/scala/foo/Main.worksheet.sc",
-          "generate@@"
-        )
-        _ = assertNoDiff(generate, "generate: Name")
-        _ = assertNoDiagnostics()
-        _ = assertNoDiff(
-          client.workspaceDecorations,
-          """|identity(42) // 42
-             |val name = sourcecode.Name.generate.value // "name"
-             |""".stripMargin
-        )
-      } yield ()
-    }
+
+  ignoreWindows("completion") {
+    for {
+      _ <- server.initialize(
+        s"""
+           |/metals.json
+           |{
+           |  "a": {
+           |    "scalaVersion": "$scalaVersion",
+           |    "libraryDependencies": ["com.lihaoyi::sourcecode:0.1.8"]
+           |  }
+           |}
+           |/a/src/main/scala/foo/Main.worksheet.sc
+           |identity(42)
+           |val name = sourcecode.Name.generate.value
+           |""".stripMargin
+      )
+      _ <- server.didOpen("a/src/main/scala/foo/Main.worksheet.sc")
+      _ <- server.didSave("a/src/main/scala/foo/Main.worksheet.sc")(identity)
+      identity <- server.completion(
+        "a/src/main/scala/foo/Main.worksheet.sc",
+        "identity@@"
+      )
+      _ = assertNoDiff(identity, "identity[A](x: A): A")
+      generate <- server.completion(
+        "a/src/main/scala/foo/Main.worksheet.sc",
+        "generate@@"
+      )
+      _ = assertNoDiff(generate, "generate: Name")
+      _ = assertNoDiagnostics()
+      _ = assertNoDiff(
+        client.workspaceDecorations,
+        """|identity(42) // 42
+           |val name = sourcecode.Name.generate.value // "name"
+           |""".stripMargin
+      )
+    } yield ()
+  }
 
   testAsync("render") {
     for {
@@ -297,7 +297,7 @@ abstract class BaseWorksheetLspSuite(scalaVersion: String)
     } yield ()
   }
 
-  testAsync("definition") {
+  ignoreWindows("definition") {
     for {
       _ <- server.initialize(
         s"""

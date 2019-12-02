@@ -138,6 +138,14 @@ class BaseSuite extends TestSuite {
     )
   }
 
+  def ignoreWindows(name: String)(fun: => Future[Unit]): Unit = {
+    if (!BaseSuite.isWindows) {
+      ignore(name)(fun)
+    } else {
+      testAsync(name)(fun)
+    }
+  }
+
   def isTestSuiteEnabled: Boolean = true
 
   def test(name: String)(fun: => Any): Unit = {
