@@ -84,35 +84,23 @@ final class ImplementationProvider(
   }
 
   def implementations(position: TextDocumentPositionParams): List[Location] = {
-    implementations(
-      Left(
-        FilePosition(
-          position.getTextDocument.getUri.toAbsolutePath,
-          position.getPosition
-        )
-      ),
-      position.getTextDocument.getUri.toAbsolutePath
-    )
+    val path = position.getTextDocument.getUri.toAbsolutePath
+    implementations(FilePosition(path, position.getPosition), path)
   }
 
   def implementations(
-      filePositionOrSymbol: Either[FilePosition, SymbolInformation],
+      filePosition: FilePosition,
       source: AbsolutePath
   ): List[Location] = {
-    filePositionOrSymbol match {
-      case Left(filePosition) =>
-        definitionProvider.symbolOccurrence(filePosition) match {
-          case Some((so, doc)) =>
-            implementations(Some(doc), so.symbol, source)
-          case None =>
-            List.empty
-        }
-      case Right(symbolInformation) =>
-        implementations(None, symbolInformation.symbol, source)
+    definitionProvider.symbolOccurrence(filePosition) match {
+      case Some((so, doc)) =>
+        implementations(Some(doc), so.symbol, source)
+      case None =>
+        List.empty
     }
   }
 
-  private def implementations(
+  def implementations(
       currentDocument: Option[TextDocument],
       symbol: String,
       source: AbsolutePath

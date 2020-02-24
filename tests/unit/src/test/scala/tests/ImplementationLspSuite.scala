@@ -484,6 +484,25 @@ class ImplementationLspSuite extends BaseLspSuite("implementation") {
   )
 
   check(
+    "all",
+    """|/a/src/main/scala/a/A.scala
+       |package a
+       |class NewException extends Exce@@ption{       
+       |    override def getMessage(): String = "???"
+       |}
+       |
+       |object Main{
+       |  val aa = new NewException
+       |
+       |  val bb = new Exception
+       |
+       |  aa.getMessage()
+       |  bb.getMessage()
+       |}
+       |""".stripMargin
+  )
+
+  check(
     "anon",
     """|/a/src/main/scala/a/Main.scala
        |package a

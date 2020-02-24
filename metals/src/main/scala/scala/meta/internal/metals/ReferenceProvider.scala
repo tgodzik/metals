@@ -135,11 +135,12 @@ final class ReferenceProvider(
     val parentSymbols = implementation
       .topMethodParents(doc, symbolOccurrence.symbol)
 
-    if (failWhenReachingDependencySymbol && parentSymbols.exists(_.isRight)) {
+    val parentSymbolInDependency = parentSymbols.exists(_.isRight)
+    if (failWhenReachingDependencySymbol && parentSymbolInDependency) {
       Seq.empty
     } else {
 
-      val mainDefinitions: Seq[Either[FilePosition, SymbolInformation]] = {
+      val mainDefinitions = {
         if (parentSymbols.isEmpty) List(Left(filePosition))
         else parentSymbols.map(ps => ps.left.map(locationToFilePosition))
       }
@@ -166,9 +167,10 @@ final class ReferenceProvider(
             .filter(_.getUri.isScalaFilename)
         else parentSymbolLocs
       }
-      val implReferences = mainDefinitions.flatMap(
+      val implReferences = mainDefinitions.flatMap(_ =>
         implementations(
-          _,
+          // TODO
+          "",
           filePosition.filePath,
           !symbolOccurrence.symbol.desc.isType,
           canSkipExactMatchCheck
@@ -180,16 +182,24 @@ final class ReferenceProvider(
   }
 
   private def implementations(
-      filePosition: Either[FilePosition, SymbolInformation],
+      symbol: String,
       source: AbsolutePath,
+      localDocument: Option[TextDocument],
+      localDistance: Option[TokenEditDistance],
       shouldCheckImplementation: Boolean,
       canSkipExactMatchCheck: Boolean
   ): Seq[Location] = {
     if (shouldCheckImplementation) {
       for {
-        implLoc <- implementation.implementations(filePosition, source)
+        implLoc <- implementation.implementations(
+          currentDocument = None,
+          symbol,
+          source
+        )
         loc <- currentSymbolReferences(
-          locationToFilePosition(implLoc),
+          "", // TODO we need to return string instead of location
+          localDocument,
+          localDistance,
           includeDeclaration = true,
           canSkipExactMatchCheck = canSkipExactMatchCheck
         ).locations
@@ -200,171 +210,87 @@ final class ReferenceProvider(
   }
 
   def currentSymbolReferences(
-      filePosition: FilePosition,
+      symbol: String,
+      localDocument: Option[TextDocument],
+      localDistance: Option[TokenEditDistance],
       includeDeclaration: Boolean,
       canSkipExactMatchCheck: Boolean = true,
       includeSynthetics: Synthetic => Boolean = _ => true
   ): ReferencesResult = {
-    val referencesResult = for {
-      doc <- semanticdbs
-        .textDocument(filePosition.filePath)
-        .documentIncludingStale
-      ResolvedSymbolOccurrence(distance, maybeOccurrence) = definition
-        .positionOccurrence(
-          filePosition,
-          doc
-        )
-      occurrence <- maybeOccurrence
-      alternatives = referenceAlternatives(doc, occurrence)
-      locations = currentSymbolReferences(
-        doc,
-        distance,
-        occurrence,
-        filePosition.filePath.toURI.toString,
-        alternatives,
+    if (symbol.isLocal) {
+      (localDocument, localDistance) match {
+        case (Some(doc), Some(distance)) =>
+          val locations = referenceLocations(
+            doc,
+            Set.empty,
+            distance,
+            workspace.resolve(doc.uri).toURI.toString(),
+            includeDeclaration,
+            canSkipExactMatchCheck,
+            includeSynthetics
+          )
+          ReferencesResult(symbol, locations)
+        case _ =>
+          ReferencesResult.empty
+      }
+    } else {
+
+      val locations = currentSymbolReferences(
+        symbol,
         includeDeclaration,
         canSkipExactMatchCheck,
         includeSynthetics
       )
-    } yield ReferencesResult(occurrence.symbol, locations)
-    referencesResult.getOrElse(ReferencesResult.empty)
+      ReferencesResult(symbol, locations)
+    }
   }
 
-  // Returns alternatives symbols for which "goto definition" resolves to the occurrence symbol.
-  private def referenceAlternatives(
-      doc: TextDocument,
-      occ: SymbolOccurrence
-  ): Set[String] = {
-    val name = occ.symbol.desc.name.value
-    // Returns true if `info` is the companion object matching the occurrence class symbol.
-    def isCompanionObject(info: SymbolInformation): Boolean =
-      info.isObject &&
-        info.displayName == name &&
-        occ.symbol == Symbols.Global(
-          info.symbol.owner,
-          Descriptor.Type(info.displayName)
-        )
-    // Returns true if `info` is a parameter of a synthetic `copy` or `apply` matching the occurrence field symbol.
-    def isCopyOrApplyParam(info: SymbolInformation): Boolean =
-      info.isParameter &&
-        info.displayName == name &&
-        occ.symbol == (Symbol(info.symbol) match {
-          case GlobalSymbol(
-              GlobalSymbol(
-                GlobalSymbol(owner, Descriptor.Term(obj)),
-                Descriptor.Method("apply", _)
-              ),
-              _
-              ) =>
-            Symbols.Global(
-              Symbols.Global(owner.value, Descriptor.Type(obj)),
-              Descriptor.Term(name)
-            )
-          case GlobalSymbol(
-              GlobalSymbol(
-                GlobalSymbol(owner, Descriptor.Type(obj)),
-                Descriptor.Method("copy", _)
-              ),
-              _
-              ) =>
-            Symbols.Global(
-              Symbols.Global(owner.value, Descriptor.Type(obj)),
-              Descriptor.Term(name)
-            )
-          case _ =>
-            ""
-        })
-    // Returns true if `info` is companion var setter method for occ.symbol var getter.
-    def isVarSetter(info: SymbolInformation): Boolean =
-      info.displayName.endsWith("_=") &&
-        info.displayName.startsWith(name) &&
-        occ.symbol == (Symbol(info.symbol) match {
-          case GlobalSymbol(owner, Descriptor.Method(setter, disambiguator)) =>
-            Symbols.Global(
-              owner.value,
-              Descriptor.Method(setter.stripSuffix("_="), disambiguator)
-            )
-          case _ =>
-            ""
-        })
-    val candidates = for {
-      info <- doc.symbols.iterator
-      if info.symbol != name
-      if {
-        isVarSetter(info) ||
-        isCompanionObject(info) ||
-        isCopyOrApplyParam(info)
-      }
-    } yield info.symbol
-    val isCandidate = candidates.toSet
-    val nonSyntheticSymbols = for {
-      doc <- doc.occurrences
-      if isCandidate(doc.symbol)
-      if doc.role.isDefinition
-    } yield doc.symbol
-    isCandidate -- nonSyntheticSymbols
-  }
   private def currentSymbolReferences(
-      snapshot: TextDocument,
-      distance: TokenEditDistance,
-      symbolOccurrence: SymbolOccurrence,
-      symbolOccurrenceUri: String,
-      alternatives: Set[String],
+      symbol: String,
       isIncludeDeclaration: Boolean,
       canSkipExactMatchCheck: Boolean,
       includeSynthetics: Synthetic => Boolean
   ): Seq[Location] = {
-    val isSymbol = alternatives + symbolOccurrence.symbol
-    if (symbolOccurrence.symbol.isLocal) {
-      referenceLocations(
-        snapshot,
-        isSymbol,
-        distance,
-        symbolOccurrenceUri,
-        isIncludeDeclaration,
-        canSkipExactMatchCheck,
-        includeSynthetics
+    val isSymbol = alternatives + symbol
+    val visited = scala.collection.mutable.Set.empty[AbsolutePath]
+    val results: Iterator[Location] = for {
+      (path, bloom) <- index.iterator
+      if bloom.mightContain(symbol)
+      scalaPath <- SemanticdbClasspath
+        .toScala(workspace, AbsolutePath(path))
+        .iterator
+      if !visited(scalaPath)
+      _ = visited.add(scalaPath)
+      if scalaPath.exists
+      semanticdb <- semanticdbs
+        .textDocument(scalaPath)
+        .documentIncludingStale
+        .iterator
+      semanticdbDistance = TokenEditDistance.fromBuffer(
+        scalaPath,
+        semanticdb.text,
+        buffers
       )
-    } else {
-      val visited = scala.collection.mutable.Set.empty[AbsolutePath]
-      val results: Iterator[Location] = for {
-        (path, bloom) <- index.iterator
-        if bloom.mightContain(symbolOccurrence.symbol)
-        scalaPath <- SemanticdbClasspath
-          .toScala(workspace, AbsolutePath(path))
-          .iterator
-        if !visited(scalaPath)
-        _ = visited.add(scalaPath)
-        if scalaPath.exists
-        semanticdb <- semanticdbs
-          .textDocument(scalaPath)
-          .documentIncludingStale
-          .iterator
-        semanticdbDistance = TokenEditDistance.fromBuffer(
-          scalaPath,
-          semanticdb.text,
-          buffers
+      uri = scalaPath.toURI.toString
+      reference <- try {
+        referenceLocations(
+          semanticdb,
+          isSymbol,
+          semanticdbDistance,
+          uri,
+          isIncludeDeclaration,
+          canSkipExactMatchCheck,
+          includeSynthetics
         )
-        uri = scalaPath.toURI.toString
-        reference <- try {
-          referenceLocations(
-            semanticdb,
-            isSymbol,
-            semanticdbDistance,
-            uri,
-            isIncludeDeclaration,
-            canSkipExactMatchCheck,
-            includeSynthetics
-          )
-        } catch {
-          case NonFatal(e) =>
-            // Can happen for example if the SemanticDB text is empty for some reason.
-            scribe.error(s"reference: $scalaPath", e)
-            Nil
-        }
-      } yield reference
-      results.toSeq
-    }
+      } catch {
+        case NonFatal(e) =>
+          // Can happen for example if the SemanticDB text is empty for some reason.
+          scribe.error(s"reference: $scalaPath", e)
+          Nil
+      }
+    } yield reference
+    results.toSeq
+
   }
 
   private def referenceLocations(
