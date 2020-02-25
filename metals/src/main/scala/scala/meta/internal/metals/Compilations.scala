@@ -9,6 +9,7 @@ import scala.meta.io.AbsolutePath
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
+import scala.concurrent.Promise
 
 final class Compilations(
     buildTargets: BuildTargets,
@@ -17,7 +18,9 @@ final class Compilations(
     buildServer: () => Option[BuildServerConnection],
     languageClient: MetalsLanguageClient,
     isCurrentlyFocused: b.BuildTargetIdentifier => Boolean,
-    compileWorksheets: Seq[AbsolutePath] => Future[Unit]
+    compileWorksheets: Seq[AbsolutePath] => Future[Unit],
+    // make sure first compilation finished
+    indexingPromise: Promise[Unit]
 )(implicit ec: ExecutionContext) {
 
   // we are maintaining a separate queue for cascade compilation since those must happen ASAP
@@ -106,13 +109,16 @@ final class Compilations(
       .andThen {
         case result =>
           updateCompiledTargetState(result)
-
-          // See https://github.com/scalacenter/bloop/issues/1067
-          classes.rebuildIndex(targets).foreach { _ =>
-            if (targets.exists(isCurrentlyFocused)) {
-              languageClient.refreshModel()
-            }
+      }
+      .flatMap { result =>
+        // See https://github.com/scalacenter/bloop/issues/1067
+        classes.rebuildIndex(targets).map { _ =>
+          if (targets.exists(isCurrentlyFocused)) {
+            languageClient.refreshModel()
           }
+          result
+        }
+
       }
 
     CancelableFuture(result, Cancelable(() => compilation.cancel(false)))
@@ -123,6 +129,7 @@ final class Compilations(
       case Failure(_) =>
         isCompiling.clear()
       case Success(_) =>
+        indexingPromise.trySuccess(())
         lastCompile = isCompiling.keySet
         isCompiling.clear()
     }

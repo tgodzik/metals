@@ -417,6 +417,15 @@ final class TestingServer(
     }
   }
 
+  def startDebuggingUnresolved(
+      params: Object
+  ): Future[TestDebugger] = {
+    executeCommand(ServerCommands.StartDebugAdapter.id, params).collect {
+      case DebugSession(_, uri) =>
+        TestDebugger(URI.create(uri), Stoppage.Handler.Continue)
+    }
+  }
+
   def didFocus(filename: String): Future[DidFocusResult.Value] = {
     server.didFocus(toPath(filename).toURI.toString).asScala
   }
@@ -492,6 +501,9 @@ final class TestingServer(
     val params = new DidChangeConfigurationParams(json)
     server.didChangeConfiguration(params).asScala
   }
+
+  def indexingDone(): Future[Unit] =
+    server.indexingPromise.future.map { _ => scribe.info("Indexing done") }
 
   def completionList(
       filename: String,

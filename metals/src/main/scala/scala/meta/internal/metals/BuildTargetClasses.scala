@@ -17,6 +17,8 @@ final class BuildTargetClasses(
 )(implicit val ec: ExecutionContext) {
   private val index = TrieMap.empty[b.BuildTargetIdentifier, Classes]
 
+  override def toString(): String = index.toString()
+
   val rebuildIndex: BatchedFunction[b.BuildTargetIdentifier, Unit] =
     BatchedFunction.fromFuture(fetchClasses)
 
@@ -25,7 +27,30 @@ final class BuildTargetClasses(
   }
 
   def invalidate(target: b.BuildTargetIdentifier): Unit = {
+    pprint.log("invalidating")
     index.put(target, new Classes)
+  }
+
+  def findMainClassByName(
+      name: String
+  ): List[(b.ScalaMainClass, b.BuildTargetIdentifier)] =
+    findClassesBy(_.mainClasses.values.find(_.getClassName() == name))
+
+  def findTestClassByName(
+      name: String
+  ): List[(String, b.BuildTargetIdentifier)] =
+    findClassesBy(_.testClasses.values.find(_ == name))
+
+  private def findClassesBy[A](
+      f: Classes => Option[A]
+  ): List[(A, b.BuildTargetIdentifier)] = {
+    pprint.log(index)
+    index
+      .mapValues(f)
+      .toList
+      .collect {
+        case (target, Some(clazz)) => clazz -> target
+      }
   }
 
   private def fetchClasses(
@@ -34,8 +59,8 @@ final class BuildTargetClasses(
     buildServer() match {
       case Some(connection) =>
         val targetsList = targets.asJava
-        targetsList.forEach(invalidate)
         val classes = targets.map(t => (t, new Classes)).toMap
+        targetsList.forEach(invalidate)
 
         val updateMainClasses = connection
           .mainClasses(new b.ScalaMainClassesParams(targetsList))
@@ -49,6 +74,7 @@ final class BuildTargetClasses(
           _ <- updateMainClasses
           _ <- updateTestClasses
         } yield {
+          pprint.log(classes)
           classes.foreach {
             case (id, classes) => index.put(id, classes)
           }
@@ -111,5 +137,8 @@ object BuildTargetClasses {
     val testClasses = new TrieMap[String, String]()
 
     def isEmpty: Boolean = mainClasses.isEmpty && testClasses.isEmpty
+
+    override def toString(): String =
+      mainClasses.toString() + "\n" + testClasses
   }
 }

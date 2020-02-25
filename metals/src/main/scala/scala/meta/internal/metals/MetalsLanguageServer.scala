@@ -121,6 +121,9 @@ class MetalsLanguageServer(
   private val languageClient = new DelegatingLanguageClient(NoopLanguageClient)
   var userConfig: UserConfiguration = UserConfiguration()
   val buildTargets: BuildTargets = new BuildTargets()
+  private val buildTargetClassesFinder =
+    new BuildTargetClassesFinder(buildTargets, buildTargetClasses)
+  val indexingPromise: Promise[Unit] = Promise[Unit]()
   val compilations: Compilations = new Compilations(
     buildTargets,
     buildTargetClasses,
@@ -128,7 +131,8 @@ class MetalsLanguageServer(
     () => buildServer,
     languageClient,
     buildTarget => focusedDocumentBuildTarget.get() == buildTarget,
-    worksheets => onWorksheetChanged(worksheets)
+    worksheets => onWorksheetChanged(worksheets),
+    indexingPromise
   )
   private val fileWatcher = register(
     new FileWatcher(
@@ -136,7 +140,6 @@ class MetalsLanguageServer(
       params => didChangeWatchedFiles(params)
     )
   )
-  private val indexingPromise = Promise[Unit]()
   val parseTrees = new BatchedFunction[AbsolutePath, Unit](paths =>
     CancelableFuture(paths.distinct.foreach(trees.didChange))
   )
@@ -1208,7 +1211,6 @@ class MetalsLanguageServer(
   def executeCommand(
       params: ExecuteCommandParams
   ): CompletableFuture[Object] = {
-    import JsonParser._
     val command = Option(params.getCommand).getOrElse("")
     command.stripPrefix("metals.") match {
       case ServerCommands.ScanWorkspaceSources() =>
@@ -1285,28 +1287,52 @@ class MetalsLanguageServer(
         }.asJavaObject
       case ServerCommands.StartDebugAdapter() =>
         val args = params.getArguments.asScala
-        args match {
-          case Seq(param: JsonElement) =>
-            val session = for {
-              params <- Future.fromTry(param.as[b.DebugSessionParams])
-              server <- DebugServer.start(
+        val debugSessionParamsParser = new JsonParser.Of[b.DebugSessionParams]
+        val mainClassParamsParser =
+          new JsonParser.Of[DebugUnresolvedMainClassParams]
+        val testClassParamsParser =
+          new JsonParser.Of[DebugUnresolvedTestClassParams]
+        val debugSessionParams: Future[b.DebugSessionParams] = args match {
+          case Seq(debugSessionParamsParser.Jsonized(params))
+              if params.getData != null =>
+            Future.successful(params)
+          case Seq(mainClassParamsParser.Jsonized(params))
+              if params.mainClass != null =>
+            Future.fromTry(
+              DebugServer.resolveMainClassParams(
                 params,
-                definitionProvider,
-                buildTargets,
-                buildServer
+                buildTargetClassesFinder,
+                languageClient.showMessage(MessageType.Warning, _)
               )
-            } yield {
-              cancelables.add(server)
-              DebugSession(server.sessionName, server.uri.toString)
-            }
-
-            session.asJavaObject
+            )
+          case Seq(testClassParamsParser.Jsonized(params))
+              if params.testClass != null =>
+            Future.fromTry(
+              DebugServer.resolveTestClassParams(
+                params,
+                buildTargetClassesFinder,
+                languageClient.showMessage(MessageType.Warning, _)
+              )
+            )
           case _ =>
             val argExample = ServerCommands.StartDebugAdapter.arguments
             val msg = s"Invalid arguments: $args. Expecting: $argExample"
-            Future.failed(new IllegalArgumentException(msg)).asJavaObject
+            Future.failed(new IllegalArgumentException(msg))
         }
 
+        val session = for {
+          params <- debugSessionParams
+          server <- DebugServer.start(
+            params,
+            definitionProvider,
+            buildTargets,
+            buildServer
+          )
+        } yield {
+          cancelables.add(server)
+          DebugSession(server.sessionName, server.uri.toString)
+        }
+        session.asJavaObject
       case ServerCommands.GotoSuperMethod() =>
         Future {
           val command = supermethods.getGoToSuperMethodCommand(params)
@@ -1317,7 +1343,6 @@ class MetalsLanguageServer(
       case ServerCommands.SuperMethodHierarchy() =>
         scribe.debug(s"Executing SuperMethodHierarchy ${command}")
         supermethods.jumpToSelectedSuperMethod(params).asJavaObject
-
       case ServerCommands.NewScalaFile() =>
         val args = params.getArguments.asScala
         val directoryURI = args.lift(0).collect {
@@ -1538,7 +1563,9 @@ class MetalsLanguageServer(
       i <- statusBar.trackFuture("Importing build", importedBuild)
       _ <- profiledIndexWorkspace(
         () => indexWorkspace(i),
-        () => indexingPromise.trySuccess(())
+        () => {
+          languageClient.refreshModel()
+        }
       )
       _ = checkRunningBloopVersion(i.bspServerVersion)
       _ <- Future.sequence[Unit, List](
@@ -1637,7 +1664,7 @@ class MetalsLanguageServer(
     val elapsed = new Timer(time)
     val result = thunk
     result.map { value =>
-      if (elapsed.isLogWorthy) {
+      if (reportStatus || elapsed.isLogWorthy) {
         scribe.info(s"time: $didWhat in $elapsed")
       }
       (elapsed, value)
@@ -1645,18 +1672,13 @@ class MetalsLanguageServer(
   }
 
   def profiledIndexWorkspace(
-      thunk: () => Unit,
+      thunk: () => Future[Unit],
       onFinally: () => Unit
   ): Future[Unit] = {
     val tracked = statusBar.trackFuture(
       s"Indexing",
-      Future {
-        timedThunk("indexed workspace", onlyIf = true) {
-          try thunk()
-          finally {
-            onFinally()
-          }
-        }
+      timed("indexed workspace", reportStatus = true) {
+        thunk().andThen { case _ => onFinally() }
       }
     )
     tracked.foreach { _ =>
@@ -1692,7 +1714,7 @@ class MetalsLanguageServer(
     scribe.info(s"memory: $footprint")
   }
 
-  def indexWorkspace(i: ImportedBuild): Unit = {
+  def indexWorkspace(i: ImportedBuild): Future[Unit] = {
     timedThunk("updated build targets", config.statistics.isIndex) {
       buildTargets.reset()
       interactiveSemanticdbs.reset()
@@ -1752,7 +1774,6 @@ class MetalsLanguageServer(
     val targets = buildTargets.all.map(_.id).toSeq
     buildTargetClasses
       .rebuildIndex(targets)
-      .foreach(_ => languageClient.refreshModel())
   }
 
   private def checkRunningBloopVersion(bspServerVersion: String) = {
