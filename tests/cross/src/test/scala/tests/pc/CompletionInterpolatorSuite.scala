@@ -5,6 +5,9 @@ import tests.pc.CrossTestEnrichments._
 
 class CompletionInterpolatorSuite extends BaseCompletionSuite {
 
+  // @tgodzik currently not implemented for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
+
   checkEdit(
     "string",
     """|object Main {
@@ -496,4 +499,39 @@ class CompletionInterpolatorSuite extends BaseCompletionSuite {
     filter = _.contains("hello")
   )
 
+  checkEdit(
+    "backtick",
+    """|object Main {
+       |  val `type` = 42
+       |  "Hello $type@@"
+       |}
+       |""".stripMargin,
+    """|object Main {
+       |  val `type` = 42
+       |  s"Hello ${`type`$0}"
+       |}
+       |""".stripMargin,
+    filterText = "\"Hello $type",
+    compat = Map(
+      "0.22" -> ""
+    )
+  )
+
+  checkEdit(
+    "backtick2",
+    """|object Main {
+       |  val `hello world` = 42
+       |  "Hello $hello@@"
+       |}
+       |""".stripMargin,
+    """|object Main {
+       |  val `hello world` = 42
+       |  s"Hello ${`hello world`$0}"
+       |}
+       |""".stripMargin,
+    filterText = "\"Hello $hello world",
+    compat = Map(
+      "0.22" -> ""
+    )
+  )
 }

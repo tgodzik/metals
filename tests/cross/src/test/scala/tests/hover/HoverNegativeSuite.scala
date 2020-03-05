@@ -4,9 +4,16 @@ import tests.pc.BaseHoverSuite
 
 class HoverNegativeSuite extends BaseHoverSuite {
 
+  // @tgodzik Test here do not make much sense for Dotty currently
+  override def excludedScalaVersions = Set("0.22.0-RC1")
+
   // Negative results should have an empty output.
-  def checkNegative(name: String, original: String): Unit =
-    check(name, original, expected = "")
+  def checkNegative(
+      name: String,
+      original: String,
+      compat: Map[String, String] = Map.empty
+  ): Unit =
+    check(name, original, expected = "", compat = compat)
 
   checkNegative(
     "block",

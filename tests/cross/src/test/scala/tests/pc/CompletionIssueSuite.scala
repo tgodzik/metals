@@ -3,6 +3,10 @@ package tests.pc
 import tests.BaseCompletionSuite
 
 class CompletionIssueSuite extends BaseCompletionSuite {
+
+  // @tgodzik due to other features not working, this will not work yet
+  override def excludedScalaVersions = Set("0.22.0-RC1")
+
   check(
     "mutate",
     """package a

@@ -27,7 +27,8 @@ class CompletionSnippetNegSuite extends BaseCompletionSuite {
         """|apply
            |unapplySeq
            |apply
-           |""".stripMargin
+           |""".stripMargin,
+      "0.22" -> "apply"
     )
   )
 
@@ -41,7 +42,10 @@ class CompletionSnippetNegSuite extends BaseCompletionSuite {
       |""".stripMargin,
     """|println()
        |println
-       |""".stripMargin
+       |""".stripMargin,
+    compat = Map(
+      "0.22" -> "println"
+    )
   )
 
   checkSnippet(
@@ -58,7 +62,10 @@ class CompletionSnippetNegSuite extends BaseCompletionSuite {
     // even if `Foo.toString` is nullary, it overrides `Object.toString()`
     // which is a Java non-nullary method with an empty parameter list.
     """|toString()
-       |""".stripMargin
+       |""".stripMargin,
+    compat = Map(
+      "0.22" -> "toString"
+    )
   )
 
   checkSnippet(
@@ -70,7 +77,8 @@ class CompletionSnippetNegSuite extends BaseCompletionSuite {
     // It's expected to have two separate results, one for `object IndexedSeq` and one for `type IndexedSeq[T]`.
     """|IndexedSeq
        |IndexedSeq
-       |""".stripMargin
+       |""".stripMargin,
+    ignoredScalaVersions = Set("0.22.0-RC1")
   )
 
 }

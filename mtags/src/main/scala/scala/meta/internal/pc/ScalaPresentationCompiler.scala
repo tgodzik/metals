@@ -14,7 +14,7 @@ import org.eclipse.lsp4j.SignatureHelp
 import org.eclipse.lsp4j.TextEdit
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContextExecutor
-import scala.meta.internal.metals.EmptyCancelToken
+import scala.meta.internal.pc.common.EmptyCancelToken
 import scala.meta.internal.mtags.BuildInfo
 import scala.meta.pc.OffsetParams
 import scala.meta.pc.PresentationCompiler
@@ -40,6 +40,8 @@ import org.eclipse.lsp4j.DocumentRangeFormattingParams
 import scala.meta.internal.metals.MultilineStringFormattingProvider
 import scala.meta.internal.jdk.CollectionConverters._
 import java.net.URI
+import scala.meta.internal.pc.common.EmptySymbolSearch
+import scala.meta.internal.pc.common.DefinitionResultImpl
 
 case class ScalaPresentationCompiler(
     buildTargetIdentifier: String = "",
@@ -127,13 +129,21 @@ case class ScalaPresentationCompiler(
     copy(config = config)
   def this() = this(buildTargetIdentifier = "")
 
-  val access = new CompilerAccess(config, sh, () => newCompiler())(ec)
+  val compilerAccess =
+    new ScalaCompilerAccess(
+      config,
+      sh,
+      () => new ScalaCompilerWrapper(newCompiler())
+    )(
+      ec
+    )
+
   override def shutdown(): Unit = {
-    access.shutdown()
+    compilerAccess.shutdown()
   }
 
   override def restart(): Unit = {
-    access.shutdownCurrentCompiler()
+    compilerAccess.shutdownCurrentCompiler()
   }
 
   override def newInstance(
@@ -148,25 +158,20 @@ case class ScalaPresentationCompiler(
     )
   }
 
-  def emptyCompletion: CompletionList = {
-    val items = new CompletionList(Nil.asJava)
-    items.setIsIncomplete(true)
-    items
-  }
-
   override def complete(
       params: OffsetParams
   ): CompletableFuture[CompletionList] =
-    access.withInterruptableCompiler(emptyCompletion, params.token) { global =>
-      new CompletionProvider(global, params).completions()
+    compilerAccess.withInterruptableCompiler(emptyCompletion(), params.token) {
+      pc =>
+        new CompletionProvider(pc.compiler, params).completions()
     }
 
   override def implementAbstractMembers(
       params: OffsetParams
   ): CompletableFuture[ju.List[TextEdit]] = {
     val empty: ju.List[TextEdit] = new ju.ArrayList[TextEdit]()
-    access.withInterruptableCompiler(empty, params.token) { global =>
-      new CompletionProvider(global, params).implementAll()
+    compilerAccess.withInterruptableCompiler(empty, params.token) { pc =>
+      new CompletionProvider(pc.compiler, params).implementAll()
     }
   }
 
@@ -174,11 +179,11 @@ case class ScalaPresentationCompiler(
       name: String,
       params: OffsetParams
   ): CompletableFuture[ju.List[AutoImportsResult]] =
-    access.withInterruptableCompiler(
+    compilerAccess.withInterruptableCompiler(
       List.empty[AutoImportsResult].asJava,
       params.token
-    ) { global =>
-      new AutoImportsProvider(global, name, params).autoImports().asJava
+    ) { pc =>
+      new AutoImportsProvider(pc.compiler, name, params).autoImports().asJava
     }
 
   // NOTE(olafur): hover and signature help use a "shared" compiler instance because
@@ -189,37 +194,37 @@ case class ScalaPresentationCompiler(
       item: CompletionItem,
       symbol: String
   ): CompletableFuture[CompletionItem] = CompletableFuture.completedFuture {
-    access.withSharedCompiler(item) { global =>
-      new CompletionItemResolver(global).resolve(item, symbol)
+    compilerAccess.withSharedCompiler(item) { pc =>
+      new CompletionItemResolver(pc.compiler).resolve(item, symbol)
     }
   }
 
   override def signatureHelp(
       params: OffsetParams
   ): CompletableFuture[SignatureHelp] =
-    access.withNonInterruptableCompiler(
+    compilerAccess.withNonInterruptableCompiler(
       new SignatureHelp(),
       params.token
-    ) { global =>
-      new SignatureHelpProvider(global).signatureHelp(params)
+    ) { pc =>
+      new SignatureHelpProvider(pc.compiler).signatureHelp(params)
     }
 
   override def hover(
       params: OffsetParams
   ): CompletableFuture[Optional[Hover]] =
-    access.withNonInterruptableCompiler(
+    compilerAccess.withNonInterruptableCompiler(
       Optional.empty[Hover](),
       params.token
-    ) { global =>
-      Optional.ofNullable(new HoverProvider(global, params).hover().orNull)
+    ) { pc =>
+      Optional.ofNullable(new HoverProvider(pc.compiler, params).hover().orNull)
     }
 
   def definition(params: OffsetParams): CompletableFuture[DefinitionResult] = {
-    access.withNonInterruptableCompiler(
+    compilerAccess.withNonInterruptableCompiler(
       DefinitionResultImpl.empty,
       params.token
-    ) { global =>
-      new PcDefinitionProvider(global, params).definition()
+    ) { pc =>
+      new PcDefinitionProvider(pc.compiler, params).definition()
     }
   }
 
@@ -227,11 +232,11 @@ case class ScalaPresentationCompiler(
       filename: String,
       code: String
   ): CompletableFuture[Array[Byte]] = {
-    access.withInterruptableCompiler(
+    compilerAccess.withInterruptableCompiler(
       Array.emptyByteArray,
       EmptyCancelToken
-    ) { global =>
-      new SemanticdbTextDocumentProvider(global)
+    ) { pc =>
+      new SemanticdbTextDocumentProvider(pc.compiler)
         .textDocument(filename, code)
         .toByteArray
     }
@@ -274,10 +279,7 @@ case class ScalaPresentationCompiler(
   // ================
 
   override def diagnosticsForDebuggingPurposes(): util.List[String] = {
-    access.reporter
-      .asInstanceOf[StoreReporter]
-      .infos
-      .iterator
+    compilerAccess.reporter.infos.iterator
       .map { info =>
         new StringBuilder()
           .append(info.pos.source.file.path)

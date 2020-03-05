@@ -6,6 +6,9 @@ import tests.BaseCompletionSuite
 
 class CompletionCaseSuite extends BaseCompletionSuite {
 
+  // @tgodzik currently not implemented for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
+
   def paramHint: Option[String] = Some("param-hint")
 
   override def config: PresentationCompilerConfig =
@@ -422,44 +425,44 @@ class CompletionCaseSuite extends BaseCompletionSuite {
   )
 
   // Apparently, known-direct subclasses does not work so well in 2.11.
-  if (!isScala211) {
-    checkEditLine(
-      "infix-custom",
-      """package pkg
-        |object Outer {
-        |  sealed trait ADT
-        |  case class :+:(a: Int, b: String) extends ADT
-        |}
-        |object Main {
-        |  val l: pkg.Outer.ADT = ???
-        |  import pkg.Outer.:+:
-        |  l match {
-        |    ___
-        |  }
-        |}
-        |""".stripMargin,
-      "cas@@",
-      "case a :+: b => $0"
-    )
+  checkEditLine(
+    "infix-custom",
+    """package pkg
+      |object Outer {
+      |  sealed trait ADT
+      |  case class :+:(a: Int, b: String) extends ADT
+      |}
+      |object Main {
+      |  val l: pkg.Outer.ADT = ???
+      |  import pkg.Outer.:+:
+      |  l match {
+      |    ___
+      |  }
+      |}
+      |""".stripMargin,
+    "cas@@",
+    "case a :+: b => $0",
+    ignoredScalaVersions = Set("2.11.12")
+  )
 
-    checkEditLine(
-      "infix-conflict",
-      """
-        |object Outer {
-        |  sealed trait List
-        |  case class ::(a: Int, b: String) extends List
-        |}
-        |object Main {
-        |  val l: Outer.List = ???
-        |  l match {
-        |    ___
-        |  }
-        |}
-        |""".stripMargin,
-      "cas@@",
-      // Assert we don't use infix syntax because `::` resolves to conflicting symbol in scope.
-      "case Outer.::(a, b) => $0"
-    )
-  }
+  checkEditLine(
+    "infix-conflict",
+    """
+      |object Outer {
+      |  sealed trait List
+      |  case class ::(a: Int, b: String) extends List
+      |}
+      |object Main {
+      |  val l: Outer.List = ???
+      |  l match {
+      |    ___
+      |  }
+      |}
+      |""".stripMargin,
+    "cas@@",
+    // Assert we don't use infix syntax because `::` resolves to conflicting symbol in scope.
+    "case Outer.::(a, b) => $0",
+    ignoredScalaVersions = Set("2.11.12")
+  )
 
 }

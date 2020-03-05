@@ -1,4 +1,4 @@
-package scala.meta.internal.pc
+package scala.meta.internal.pc.common
 
 import java.{util => ju}
 import org.eclipse.lsp4j.Location

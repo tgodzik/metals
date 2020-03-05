@@ -4,9 +4,10 @@ import tests.BaseCompletionSuite
 
 class CompletionOverrideSuite extends BaseCompletionSuite {
 
-  override def beforeAll(): Unit = {
-    indexJDK()
-  }
+  override def requiresJdkSources: Boolean = true
+
+  // @tgodzik currently not implemented for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
 
   checkEdit(
     "basic",

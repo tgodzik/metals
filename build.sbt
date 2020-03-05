@@ -1,4 +1,4 @@
-def localSnapshotVersion = "0.8.2-dotty-SNAPSHOT"
+def localSnapshotVersion = "0.8.2-SNAPSHOT"
 def isCI = System.getenv("CI") != null
 def crossSetting[A](
     scalaVersion: String,
@@ -177,10 +177,11 @@ lazy val interfaces = project
   .settings(
     moduleName := "mtags-interfaces",
     autoScalaLibrary := false,
+    crossPaths := false,
     libraryDependencies ++= List(
       V.lsp4j
     ),
-    crossVersion := CrossVersion.disabled,
+    crossScalaVersions := List(V.scala212),
     javacOptions in (Compile / doc) ++= List(
       "-tag",
       "implNote:a:Implementation Note:"
@@ -192,24 +193,22 @@ val genyVersion = Def.setting {
   else "0.4.2"
 }
 
-lazy val dtags = project
+lazy val mtags3 = project
   .settings(
     scalaVersion := V.scala3,
     crossVersion := CrossVersion.full,
-    moduleName := "dtags",
+    moduleName := "mtags3",
     libraryDependencies := List(
       "ch.epfl.lamp" % "dotty-compiler_0.22" % V.scala3,
       "com.fasterxml.jackson.core" % "jackson-databind" % "2.9.8"
     ),
+    Compile / unmanagedSourceDirectories += file("mtags-common") / "src/main/scala",
     scalacOptions ++= Seq(
       "-language:implicitConversions"
     ),
     scalacOptions --= Seq(
       "-Yrangepos",
-      "-Ywarn-unused:imports",
-      "-sourceroot",
-      baseDirectory.in(ThisBuild).value.toString,
-      "-Ysemanticdb"
+      "-Ywarn-unused:imports"
     )
   )
   .dependsOn(interfaces)
@@ -218,8 +217,10 @@ lazy val dtags = project
 lazy val mtags = project
   .settings(
     moduleName := "mtags",
+    crossTarget := target.value / s"scala-${scalaVersion.value}",
     crossVersion := CrossVersion.full,
     crossScalaVersions := V.scala2Versions,
+    Compile / unmanagedSourceDirectories += file("mtags-common") / "src/main/scala",
     scalacOptions ++= crossSetting(
       scalaVersion.value,
       if211 = List("-Xexperimental", "-Ywarn-unused-import")
@@ -400,6 +401,62 @@ lazy val testSettings: Seq[Def.Setting[_]] = List(
   }
 )
 
+def crossPublishLocal(scalaV: String) = Def.task[Unit] {
+  // Runs `publishLocal` for mtags with `scalaVersion := $scalaV`
+  val newState = Project
+    .extract(state.value)
+    .appendWithSession(
+      List(
+        scalaVersion.in(mtags) := scalaV,
+        useSuperShell.in(ThisBuild) := false
+      ),
+      state.value
+    )
+  val (s, _) = Project
+    .extract(newState)
+    .runTask(publishLocal.in(mtags), newState)
+}
+
+def publishAllMtags(
+    all: List[String]
+): sbt.Def.Initialize[sbt.Task[Unit]] = {
+  all match {
+    case Nil =>
+      throw new Exception("The Scala versions list cannot be empty")
+    case head :: Nil =>
+      crossPublishLocal(head)
+    case head :: tl =>
+      crossPublishLocal(head).dependsOn(publishAllMtags(tl))
+  }
+}
+
+def publishBinaryMtags =
+  publishLocal
+    .in(interfaces)
+    .dependsOn(
+      publishAllMtags(List(V.scala211, V.scala212, V.scala213))
+    )
+    .dependsOn(
+      publishLocal.in(mtags3)
+    )
+
+def publishAll =
+  publishLocal
+    .in(interfaces)
+    .dependsOn(
+      publishAllMtags(V.scala2Versions.toList)
+        .dependsOn(
+          publishLocal.in(mtags3)
+        )
+    )
+
+// we need to have all mtags published for running cross tests on CI,
+// but locally that can cause uneccessary recompiles
+def publishForTests = {
+  if (isCI) publishAll
+  else publishBinaryMtags
+}
+
 lazy val mtest = project
   .in(file("tests/mtest"))
   .settings(
@@ -445,6 +502,8 @@ lazy val cross = project
       case _ => Nil
     }),
     crossScalaVersions := V.nonDeprecatedScalaVersions,
+    testOnly.in(Test) := testOnly.in(Test).dependsOn(publishForTests).evaluated,
+    test.in(Test) := test.in(Test).dependsOn(publishForTests).value,
     scalacOptions ++= crossSetting(
       scalaVersion.value,
       if211 = List("-Xexperimental", "-Ywarn-unused-import")
@@ -455,7 +514,7 @@ lazy val cross = project
     ),
     addCompilerPlugin(scalafixSemanticdb)
   )
-  .dependsOn(mtest, mtags)
+  .dependsOn(mtest, metals)
 
 lazy val unit = project
   .in(file("tests/unit"))
@@ -482,36 +541,13 @@ lazy val unit = project
   .dependsOn(mtest, metals)
   .enablePlugins(BuildInfoPlugin)
 
-def crossPublishLocal(scalaV: String) = Def.task[Unit] {
-  // Runs `publishLocal` for mtags with `scalaVersion := $scalaV`
-  val newState = Project
-    .extract(state.value)
-    .appendWithSession(
-      List(
-        scalaVersion.in(mtags) := scalaV,
-        useSuperShell.in(ThisBuild) := false
-      ),
-      state.value
-    )
-  val (s, _) = Project
-    .extract(newState)
-    .runTask(publishLocal.in(mtags), newState)
-}
-
-def publishMtags =
-  publishLocal
-    .in(interfaces)
-    .dependsOn(
-      crossPublishLocal(V.scala211)
-        .dependsOn(crossPublishLocal(V.scala213))
-    )
-
 lazy val slow = project
   .in(file("tests/slow"))
   .settings(
     testSettings,
-    testOnly.in(Test) := testOnly.in(Test).dependsOn(publishMtags).evaluated,
-    test.in(Test) := test.in(Test).dependsOn(publishMtags).value,
+    testOnly
+      .in(Test) := testOnly.in(Test).dependsOn(publishBinaryMtags).evaluated,
+    test.in(Test) := test.in(Test).dependsOn(publishBinaryMtags).value,
     addCompilerPlugin(scalafixSemanticdb)
   )
   .dependsOn(unit)

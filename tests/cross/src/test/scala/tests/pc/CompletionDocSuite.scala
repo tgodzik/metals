@@ -4,11 +4,10 @@ import tests.BaseCompletionSuite
 
 class CompletionDocSuite extends BaseCompletionSuite {
   override def requiresJdkSources: Boolean = true
+  override def requiresScalaLibrarySources: Boolean = true
 
-  override def beforeAll(): Unit = {
-    indexJDK()
-    indexScalaLibrary()
-  }
+  // @tgodzik currently not implemented for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
 
   check(
     "java",
@@ -342,8 +341,8 @@ class CompletionDocSuite extends BaseCompletionSuite {
            |- `CC`: Collection type constructor (e.g. `SortedSet`)
            |SortedIterableFactory scala.collection
            |> **Type Parameters**
-           |- `A`: Type of elements (e.g. `Int`, `Boolean`, etc.)
            |- `C`: Type of collection (e.g. `List[Int]`, `TreeMap[Int, String]`, etc.)
+           |- `A`: Type of elements (e.g. `Int`, `Boolean`, etc.)
            |SpecificIterableFactory scala.collection
            |""".stripMargin
     )
@@ -537,25 +536,7 @@ class CompletionDocSuite extends BaseCompletionSuite {
        |- `fin`: Finally logic which if defined will be invoked after catch logic
        |Catch - scala.util.control.Exception
        |""".stripMargin,
-    includeDocs = true,
-    compat = Map(
-      "2.13" ->
-        """|> A container class for catch/finally logic.
-           |
-           | Pass a different value for rethrow if you want to probably
-           | unwisely allow catching control exceptions and other throwables
-           | which the rest of the world may expect to get through.
-           |
-           |**Type Parameters**
-           |- `T`: result type of bodies used in try and catch blocks
-           |
-           |**Parameters**
-           |- `fin`: Finally logic which if defined will be invoked after catch logic
-           |- `rethrow`: Predicate on throwables determining when to rethrow a caught [Throwable](Throwable)
-           |- `pf`: Partial function used when applying catch logic to determine result value
-           |Catch - scala.util.control.Exception
-           |""".stripMargin
-    )
+    includeDocs = true
   )
 
   check(
@@ -669,8 +650,8 @@ class CompletionDocSuite extends BaseCompletionSuite {
            |- `V1`: type of the values of the new bindings, a supertype of `V`
            |
            |**Parameters**
-           |- `value`: the value to be associated with `key`
            |- `key`: the key to be inserted
+           |- `value`: the value to be associated with `key`
            |
            |**Returns:** a new immutable tree map with the inserted binding, if it wasn't present in the map
            |insert[V1 >: Int](key: Int, value: V1): TreeMap[Int,V1]

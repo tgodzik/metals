@@ -4,10 +4,9 @@ import tests.BaseSignatureHelpSuite
 
 class SignatureHelpDocSuite extends BaseSignatureHelpSuite {
 
-  override def beforeAll(): Unit = {
-    indexJDK()
-    indexScalaLibrary()
-  }
+  override def requiresJdkSources: Boolean = true
+
+  override def requiresScalaLibrarySources: Boolean = true
 
   val foldLatestDocs: String =
     """|Returns the result of applying `f` to this [scala.Option](scala.Option)'s

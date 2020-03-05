@@ -54,6 +54,7 @@ import ch.epfl.scala.bsp4j.CompileReport
 import java.{util => ju}
 import scala.meta.internal.metals.Messages.IncompatibleBloopVersion
 import com.google.gson.JsonNull
+import scala.meta.internal.pc.common.EmptyCancelToken
 
 class MetalsLanguageServer(
     ec: ExecutionContextExecutorService,

@@ -1,4 +1,4 @@
-package scala.meta.internal.pc
+package scala.meta.internal.pc.common
 
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.PriorityBlockingQueue

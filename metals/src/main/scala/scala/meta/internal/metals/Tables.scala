@@ -8,7 +8,7 @@ import org.flywaydb.core.api.FlywayException
 import scala.meta.internal.builds.Digests
 import scala.meta.io.AbsolutePath
 import scala.util.control.NonFatal
-import scala.meta.internal.pc.InterruptException
+import scala.meta.internal.pc.common.InterruptException
 
 final class Tables(
     workspace: AbsolutePath,

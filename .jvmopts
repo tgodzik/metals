@@ -5,3 +5,4 @@
 -XX:+TieredCompilation
 -XX:+CMSClassUnloadingEnabled
 -Dfile.encoding=UTF-8
+-Dsbt.io.implicit.relative.glob.conversion=allow

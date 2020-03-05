@@ -24,7 +24,9 @@ class PrettyPrintSuite extends BaseCompletionSuite {
          |}
       """.stripMargin,
       completion,
-      getExpected(expected, compat) + " = ${0:???}"
+      expected
+      // TODO move down
+      // getExpected(expected, compat) + " = ${0:???}"
     )
   }
 

@@ -2,10 +2,9 @@ package tests.pc
 
 class PcDefinitionSuite extends BasePcDefinitionSuite {
 
-  override def beforeAll(): Unit = {
-    indexJDK()
-    indexScalaLibrary()
-  }
+  override def requiresJdkSources: Boolean = true
+
+  override def requiresScalaLibrarySources: Boolean = true
 
   check(
     "basic",

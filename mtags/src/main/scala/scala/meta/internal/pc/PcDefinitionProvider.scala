@@ -6,6 +6,7 @@ import scala.meta.pc.OffsetParams
 import scala.meta.internal.semanticdb.Scala._
 import scala.meta.internal.mtags.MtagsEnrichments._
 import scala.meta.pc.DefinitionResult
+import scala.meta.internal.pc.common.DefinitionResultImpl
 
 class PcDefinitionProvider(val compiler: MetalsGlobal, params: OffsetParams) {
   import compiler._

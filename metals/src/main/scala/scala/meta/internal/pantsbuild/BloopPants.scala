@@ -16,7 +16,7 @@ import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.BuildInfo
 import scala.meta.internal.metals.MetalsLogger
 import scala.meta.internal.pantsbuild.commands._
-import scala.meta.internal.pc.InterruptException
+import scala.meta.internal.pc.common.InterruptException
 import scala.meta.internal.process.SystemProcess
 import scala.meta.io.AbsolutePath
 import scala.meta.pc.CancelToken

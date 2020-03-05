@@ -7,6 +7,9 @@ import tests.BaseCompletionSuite
 
 class CompletionOverrideConfigSuite extends BaseCompletionSuite {
 
+  // @tgodzik currently not implemented for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
+
   override def config: PresentationCompilerConfig =
     PresentationCompilerConfigImpl().copy(
       _symbolPrefixes = Map(

@@ -3,6 +3,7 @@ package scala.meta.internal.metals
 import scala.meta.pc.CancelToken
 import scala.meta.pc.VirtualFileParams
 import java.net.URI
+import scala.meta.internal.pc.common.EmptyCancelToken
 
 case class CompilerVirtualFileParams(
     uri: URI,

@@ -7,6 +7,9 @@ import scala.collection.Seq
 class MacroCompletionSuite extends BaseCompletionSuite {
   override def extraClasspath: Seq[Path] = thisClasspath
 
+  // @tgodzik macros will not work in Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
+
   override def scalacOptions: Seq[String] =
     thisClasspath
       .filter { path =>

@@ -3,6 +3,10 @@ package tests.pc
 import tests.BaseCompletionSuite
 
 class CompletionArgSuite extends BaseCompletionSuite {
+
+  // @tgodzik currently not implemented for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
+
   check(
     "arg",
     s"""|object Main {

@@ -32,30 +32,35 @@ class InterruptPresentationCompilerSuite extends BasePCSuite {
     }
   }
 
-  val interrupt = new InterruptSymbolIndex()
+  // @tgodzik currently not handled for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
 
   override def beforeEach(context: BeforeEach): Unit = {
-    interrupt.reset()
+    presentationCompilers.foreach {
+      case (_, testEnv) =>
+        testEnv.index.asInstanceOf[InterruptSymbolIndex].reset()
+    }
     super.beforeEach(context)
   }
 
-  override def beforeAll(): Unit = {
-    index.underlying = interrupt
-    indexScalaLibrary()
-  }
+  override def requiresScalaLibrarySources: Boolean = true
+
+  override def newIndex: DelegatingGlobalSymbolIndex =
+    new InterruptSymbolIndex()
 
   def check(
       name: String,
       original: String,
       act: (PresentationCompiler, OffsetParams) => CompletableFuture[_]
   )(implicit loc: Location): Unit = {
-    test(name) {
+    testPc(name) { implicit testEnvironment =>
       val (code, offset) = this.params(original)
+      val interrupt = testEnvironment.index.asInstanceOf[InterruptSymbolIndex]
       try {
         val result = act(
-          pc,
+          testEnvironment.pc,
           CompilerOffsetParams(
-            URI.create("file://A.scala"),
+            URI.create("file:///A.scala"),
             code,
             offset,
             interrupt.token.get()

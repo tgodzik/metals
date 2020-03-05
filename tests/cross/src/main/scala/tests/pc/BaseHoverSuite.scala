@@ -21,7 +21,7 @@ abstract class BaseHoverSuite
       automaticPackage: Boolean = true,
       compat: Map[String, String] = Map.empty
   )(implicit loc: Location): Unit = {
-    test(name) {
+    testPc(name) { implicit testEnvironment =>
       val filename = "Hover.scala"
       val pkg = scala.meta.Term.Name(name).syntax
       val noRange = original
@@ -32,13 +32,16 @@ abstract class BaseHoverSuite
         else ""
       val codeOriginal = packagePrefix + noRange
       val (code, offset) = params(codeOriginal, filename)
-      val hover = pc
+      val hover = testEnvironment.pc
         .hover(
           CompilerOffsetParams(Paths.get(filename).toUri(), code, offset)
         )
         .get()
       val obtained: String = renderAsString(code, hover.asScala, includeRange)
-      assertNoDiff(obtained, getExpected(expected, compat))
+      assertNoDiff(
+        obtained,
+        getExpected(expected, compat, testEnvironment.scalaVersion)
+      )
       for {
         h <- hover.asScala
         range <- Option(h.getRange)

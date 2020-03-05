@@ -4,6 +4,7 @@ import scala.meta.pc.CancelToken
 import scala.meta.pc.OffsetParams
 import scala.meta.inputs.Position
 import java.net.URI
+import scala.meta.internal.pc.common.EmptyCancelToken
 
 case class CompilerOffsetParams(
     uri: URI,

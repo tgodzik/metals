@@ -2,7 +2,6 @@ package tests
 
 import scala.concurrent.duration.Duration
 import scala.meta.internal.metals.JdkSources
-import scala.meta.internal.mtags
 import scala.meta.internal.semver.SemVer
 import scala.util.Properties
 import munit.Tag
@@ -15,9 +14,6 @@ class BaseSuite extends munit.FunSuite with Assertions {
 
   def isJava8: Boolean =
     !Properties.isJavaAtLeast("9")
-
-  def isScala211: Boolean =
-    mtags.BuildInfo.scalaCompilerVersion.startsWith("2.11")
 
   def hasJdkSources: Boolean = JdkSources().isDefined
 
@@ -45,9 +41,6 @@ class BaseSuite extends munit.FunSuite with Assertions {
     }
   }
 
-  private def scalaVersion: String =
-    Properties.versionNumberString
-
   private def scalaBinary(scalaVersion: String): String =
     scalaVersion.split("\\.").take(2).mkString(".")
 
@@ -57,7 +50,7 @@ class BaseSuite extends munit.FunSuite with Assertions {
   def getExpected(
       default: String,
       compat: Map[String, String],
-      scalaVersion: String = this.scalaVersion
+      scalaVersion: String
   ): String = {
     val postProcess = compatProcess
       .get(scalaBinary(scalaVersion))

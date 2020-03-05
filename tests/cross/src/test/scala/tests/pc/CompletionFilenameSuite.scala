@@ -4,6 +4,9 @@ import tests.BaseCompletionSuite
 
 class CompletionFilenameSuite extends BaseCompletionSuite {
 
+  // @tgodzik currently not implemented for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
+
   check(
     "class".only,
     """|

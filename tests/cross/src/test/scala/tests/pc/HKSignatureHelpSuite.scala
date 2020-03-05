@@ -12,6 +12,9 @@ class HKSignatureHelpSuite extends BaseSignatureHelpSuite {
       .map(url => Paths.get(url.toURI))
       .toList
 
+  // @tgodzik currently not implemented for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
+
   check(
     "foldmap",
     """import cats.implicits._

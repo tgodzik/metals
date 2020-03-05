@@ -1,10 +1,10 @@
 package tests
 
-import scala.meta.internal.metals.EmptyCancelToken
 import scala.meta.pc.CancelToken
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import scala.util.control.NonFatal
+import scala.meta.internal.pc.common.EmptyCancelToken
 
 abstract class BaseCodeActionSuite extends BasePCSuite {
 
@@ -12,7 +12,7 @@ abstract class BaseCodeActionSuite extends BasePCSuite {
 
   def params(
       code: String
-  ): (String, String, Int) = {
+  )(implicit testEnvironment: TestEnvironment): (String, String, Int) = {
     val filename = "test.scala"
     val targetRegex = "<<(.+)>>".r
     val target = targetRegex.findAllMatchIn(code).toList match {
@@ -24,12 +24,12 @@ abstract class BaseCodeActionSuite extends BasePCSuite {
     val offset = code.indexOf("<<") + target.length()
     val file = tmp.resolve(filename)
     Files.write(file.toNIO, code2.getBytes(StandardCharsets.UTF_8))
-    try index.addSourceFile(file, Some(tmp))
+    try testEnvironment.index.addSourceFile(file, Some(tmp))
     catch {
       case NonFatal(e) =>
         println(s"warn: $e")
     }
-    workspace.inputs(filename) = code2
+    testEnvironment.workspace.inputs(filename) = code2
     (code2, target, offset)
   }
 

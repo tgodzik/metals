@@ -1,7 +1,7 @@
 package tests.pc
 
 import tests.BaseSuite
-import scala.meta.internal.pc.CompilerJobQueue
+import scala.meta.internal.pc.common.CompilerJobQueue
 import scala.concurrent.Promise
 import scala.concurrent.Future
 import scala.concurrent.Await

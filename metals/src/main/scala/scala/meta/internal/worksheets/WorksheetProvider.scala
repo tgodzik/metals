@@ -14,7 +14,7 @@ import scala.meta.internal.metals.UserConfiguration
 import scala.meta.internal.metals.MetalsLanguageClient
 import scala.meta.internal.metals.ScalaVersions
 import scala.meta.internal.metals.BuildInfo
-import scala.meta.internal.pc.CompilerJobQueue
+import scala.meta.internal.pc.common.CompilerJobQueue
 import java.util.concurrent.CompletableFuture
 import scala.concurrent.ExecutionContext
 import java.util.concurrent.ScheduledExecutorService
@@ -22,7 +22,7 @@ import scala.meta.internal.metals.MetalsSlowTaskParams
 import java.util.concurrent.TimeUnit
 import scala.meta.internal.metals.MutableCancelable
 import scala.meta.internal.metals.StatusBar
-import scala.meta.internal.pc.InterruptException
+import scala.meta.internal.pc.common.InterruptException
 import scala.util.control.NonFatal
 import java.util.concurrent.Executors
 import scala.meta.internal.metals.Diagnostics

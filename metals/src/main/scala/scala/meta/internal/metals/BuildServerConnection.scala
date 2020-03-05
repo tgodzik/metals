@@ -13,7 +13,7 @@ import org.eclipse.lsp4j.jsonrpc.Launcher
 
 import scala.concurrent.ExecutionContextExecutorService
 import scala.concurrent.Future
-import scala.meta.internal.pc.InterruptException
+import scala.meta.internal.pc.common.InterruptException
 import scala.meta.io.AbsolutePath
 import scala.util.Try
 import com.google.gson.Gson

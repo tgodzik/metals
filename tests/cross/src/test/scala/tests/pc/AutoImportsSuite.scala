@@ -7,8 +7,12 @@ import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.internal.metals.TextEdits
 import munit.Location
 import java.nio.file.Paths
+import tests.TestEnvironment
 
 class AutoImportsSuite extends BaseCodeActionSuite {
+
+  // @tgodzik currently not implemented for Dotty
+  override def excludedScalaVersions = Set("0.22.0-RC1")
 
   check(
     "basic",
@@ -88,16 +92,19 @@ class AutoImportsSuite extends BaseCodeActionSuite {
       expected: String,
       compat: Map[String, String] = Map.empty
   )(implicit loc: Location): Unit =
-    test(name) {
+    testPc(name) { implicit testEnvironment =>
       val imports = getAutoImports(original)
       val obtained = imports.map(_.packageName()).mkString("\n")
-      assertNoDiff(obtained, getExpected(expected, compat))
+      assertNoDiff(
+        obtained,
+        getExpected(expected, compat, testEnvironment.scalaVersion)
+      )
     }
 
   def checkEdit(name: String, original: String, expected: String)(
       implicit loc: Location
   ): Unit =
-    test(name) {
+    testPc(name) { implicit testEnvironment =>
       val imports = getAutoImports(original)
       if (imports.isEmpty) fail("obtained no imports")
       val edits = imports.head.edits().asScala.toList
@@ -109,9 +116,9 @@ class AutoImportsSuite extends BaseCodeActionSuite {
   def getAutoImports(
       original: String,
       filename: String = "A.scala"
-  ): List[AutoImportsResult] = {
+  )(implicit testEnvironment: TestEnvironment): List[AutoImportsResult] = {
     val (code, symbol, offset) = params(original)
-    val result = pc
+    val result = testEnvironment.pc
       .autoImports(
         symbol,
         CompilerOffsetParams(

@@ -22,11 +22,12 @@ abstract class BaseSignatureHelpSuite extends BasePCSuite {
       compat: Map[String, String] = Map.empty,
       stableOrder: Boolean = true
   )(implicit loc: Location): Unit = {
-    test(name) {
+    testPc(name) { implicit testEnvironment =>
       val pkg = scala.meta.Term.Name(name).syntax
       val (code, offset) = params(s"package $pkg\n" + original)
       val result =
-        pc.signatureHelp(
+        testEnvironment.pc
+          .signatureHelp(
             CompilerOffsetParams(Paths.get("A.scala").toUri(), code, offset)
           )
           .get()
@@ -76,7 +77,10 @@ abstract class BaseSignatureHelpSuite extends BasePCSuite {
       }
       assertNoDiff(
         sortLines(stableOrder, out.toString()),
-        sortLines(stableOrder, getExpected(expected, compat))
+        sortLines(
+          stableOrder,
+          getExpected(expected, compat, testEnvironment.scalaVersion)
+        )
       )
     }
   }

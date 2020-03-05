@@ -1,12 +1,21 @@
-package scala.meta.internal.dotty
+package scala.meta.internal.pc
 
-import scala.meta.pc.PresentationCompiler
-import scala.meta.pc.PresentationCompilerConfig
-import scala.meta.pc.SymbolSearch
-import scala.meta.pc.DefinitionResult
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.ScheduledExecutorService
-import scala.meta.pc.OffsetParams
+import java.util.concurrent.CompletableFuture
+import java.util.Optional
+import java.io.File
+import java.io.BufferedWriter
+import java.io.OutputStreamWriter
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.net.URI
+import java.{util => ju}
+import scala.concurrent.ExecutionContext
+import scala.concurrent.ExecutionContextExecutor
+import scala.io.Codec
+import scala.collection.JavaConverters._
+import scala.language.implicitConversions
 import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.CompletionItem
@@ -25,16 +34,6 @@ import org.eclipse.lsp4j.DocumentOnTypeFormattingParams
 import org.eclipse.lsp4j.DocumentRangeFormattingParams
 import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.DiagnosticSeverity
-import scala.concurrent.ExecutionContext
-import scala.concurrent.ExecutionContextExecutor
-import java.io.File
-import java.io.BufferedWriter
-import java.io.OutputStreamWriter
-import scala.io.Codec
-import java.net.URI
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.util.concurrent.CompletableFuture
 import dotty.tools.dotc.interactive.InteractiveDriver
 import dotty.tools.dotc.interactive.Interactive
 import dotty.tools.dotc.interactive.Completion
@@ -42,75 +41,96 @@ import dotty.tools.dotc.core.Contexts.Context
 import dotty.tools.dotc.core.Symbols._
 import dotty.tools.dotc.core.Names._
 import dotty.tools.dotc.core.Types._
+import dotty.tools.dotc.core.Flags
 import dotty.tools.dotc.core.SymDenotations._
 import dotty.tools.dotc.core.NameOps._
 import dotty.tools.dotc.core.NameKinds._
 import dotty.tools.dotc.core.Flags._
+import dotty.tools.dotc.core.Annotations.AnnotInfo
 import dotty.tools.dotc.util.SourcePosition
 import dotty.tools.dotc.util.Spans
 import dotty.tools.dotc.util.ParsedComment
 import dotty.tools.dotc.util.Signatures
 import dotty.tools.dotc.util.SourceFile
 import dotty.tools.dotc.parsing.Parsers.Parser
+import dotty.tools.dotc.printing.PlainPrinter
 import dotty.tools.dotc.reporting.diagnostic.Message
 import dotty.tools.dotc.reporting.StoreReporter
 import dotty.tools.dotc.reporting.diagnostic.MessageContainer
 import dotty.tools.io.VirtualFile
 import dotty.tools.dotc.interfaces.{Diagnostic => DottyDiagnostic}
 import dotty.tools.dotc.ast.tpd
-import java.{util => ju}
+import scala.meta.internal.pc.common
+import scala.meta.internal.pc.common.EmptyCancelToken
+import scala.meta.internal.pc.common.DefinitionResultImpl
+import scala.meta.internal.pc.common.CompilerAccess
 import scala.meta.pc.VirtualFileParams
-import scala.collection.JavaConverters._
-import scala.language.implicitConversions
+import scala.meta.pc.PresentationCompilerConfig
+import scala.meta.pc.PresentationCompiler
+import scala.meta.pc.SymbolSearch
+import scala.meta.pc.DefinitionResult
+import scala.meta.pc.OffsetParams
 
-class ScalaPresentationCompiler(
+case class ScalaPresentationCompiler(
     classpath: Seq[Path] = Nil,
-    options: List[String] = Nil
+    options: List[String] = Nil,
+    search: SymbolSearch = common.EmptySymbolSearch,
+    ec: ExecutionContextExecutor = ExecutionContext.global,
+    sh: Option[ScheduledExecutorService] = None,
+    config: PresentationCompilerConfig = PresentationCompilerConfigImpl()
 ) extends PresentationCompiler {
 
   def this() = this(Nil, Nil)
 
   import InteractiveDriver._
 
-  private var currentDriver: Option[InteractiveDriver] = None
+  val compilerAccess: CompilerAccess[StoreReporter, InteractiveDriver] = {
+    Scala3CompilerAccess(
+      config,
+      sh,
+      () => new Scala3CompilerWrapper(newDriver)
+    )(
+      ec
+    )
+  }
 
-  def driver: InteractiveDriver = {
-    currentDriver.getOrElse {
-      this.synchronized {
-        val defaultFlags = List("-color:never")
-        val settings =
-          options ::: defaultFlags ::: "-classpath" :: classpath.mkString(
-            File.pathSeparator
-          ) :: Nil
-        val driver = new InteractiveDriver(settings)
-        currentDriver = Some(driver)
-        driver
-      }
-    }
+  def newDriver: InteractiveDriver = {
+    val defaultFlags = List("-color:never")
+    val settings =
+      options ::: defaultFlags ::: "-classpath" :: classpath.mkString(
+        File.pathSeparator
+      ) :: Nil
+    new InteractiveDriver(settings)
   }
 
   def complete(params: OffsetParams): CompletableFuture[CompletionList] = {
-    CompletableFuture.completedFuture {
-      val uri = params.uri
-      val message = driver.run(uri, params.text)
-      implicit def ctx: Context = driver.currentCtx
+    compilerAccess.withInterruptableCompiler(emptyCompletion(), params.token) {
+      access =>
+        val driver = access.compiler()
+        val uri = params.uri
+        driver.run(uri, params.text)
+        implicit def ctx: Context = driver.currentCtx
 
-      val pos = sourcePosition(driver, params, uri)
-      val items = driver.compilationUnits.get(uri) match {
-        case Some(unit) =>
-          Completion.completions(pos)(ctx.fresh.setCompilationUnit(unit))._2
-        case None => Nil
-      }
+        val pos = sourcePosition(driver, params, uri)
+        val items = driver.compilationUnits.get(uri) match {
+          case Some(unit) =>
+            Completion.completions(pos)(ctx.fresh.setCompilationUnit(unit))._2
+          case None => Nil
+        }
 
-      new CompletionList(
-        /*isIncomplete = */ false,
-        items.map(completionItem).asJava
-      )
+        new CompletionList(
+          /*isIncomplete = */ false,
+          items.map(completionItem).asJava
+        )
     }
   }
 
-  def definition(params: OffsetParams): CompletableFuture[DefinitionResult] =
-    CompletableFuture.completedFuture {
+  def definition(params: OffsetParams): CompletableFuture[DefinitionResult] = {
+    compilerAccess.withNonInterruptableCompiler(
+      DefinitionResultImpl.empty,
+      params.token
+    ) { access =>
+      val driver = access.compiler()
       implicit def ctx: Context = driver.currentCtx
       val uri = params.uri
       driver.run(uri, params.text)
@@ -118,21 +138,20 @@ class ScalaPresentationCompiler(
       val path = Interactive.pathTo(driver.openedTrees(uri), pos)
       val definitions = Interactive.findDefinitions(path, pos, driver).toList
 
-      new DefinitionResultImpl(
+      DefinitionResultImpl(
         "",
         definitions.flatMap(d => location(d.namePos)).asJava
       )
-    }
 
-  def shutdown(): Unit = this.synchronized {
-    currentDriver = None
+    }
+  }
+
+  def shutdown(): Unit = {
+    compilerAccess.shutdown()
   }
 
   def restart(): Unit = {
-    this.synchronized {
-      currentDriver = None
-      driver
-    }
+    compilerAccess.shutdownCurrentCompiler()
   }
 
   def diagnosticsForDebuggingPurposes(): ju.List[String] = List[String]().asJava
@@ -206,6 +225,7 @@ class ScalaPresentationCompiler(
     )
   }
 
+  // TODO NOT IMPLEMENTED
   def implementAbstractMembers(
       params: OffsetParams
   ): CompletableFuture[ju.List[TextEdit]] = {
@@ -215,10 +235,15 @@ class ScalaPresentationCompiler(
   }
 
   def hover(params: OffsetParams): CompletableFuture[ju.Optional[Hover]] =
-    CompletableFuture.completedFuture {
+    compilerAccess.withNonInterruptableCompiler(
+      ju.Optional.empty[Hover](),
+      params.token
+    ) { access =>
+      val driver = access.compiler()
       val uri = params.uri
-      implicit def ctx: Context = driver.currentCtx
+      driver.run(uri, params.text)
 
+      implicit def ctx: Context = driver.currentCtx
       val pos = sourcePosition(driver, params, uri)
       val trees = driver.openedTrees(uri)
       val path = Interactive.pathTo(trees, pos)
@@ -233,7 +258,18 @@ class ScalaPresentationCompiler(
             ju.Optional.empty()
           case symbols =>
             val docComments = symbols.flatMap(ParsedComment.docOf)
-            val content = hoverContent(Some(tpw.show), docComments)
+
+            val keywordName = symbols.headOption.map { symbol =>
+              SymbolPrinter().fullDefinition(
+                symbol,
+                tpw
+              )
+            }
+            val content = hoverContent(
+              keywordName,
+              Some(tpw.show),
+              docComments
+            )
             ju.Optional.of(new Hover(content, null))
         }
       }
@@ -251,7 +287,11 @@ class ScalaPresentationCompiler(
   }
 
   def signatureHelp(params: OffsetParams): CompletableFuture[SignatureHelp] =
-    CompletableFuture.completedFuture {
+    compilerAccess.withNonInterruptableCompiler(
+      new SignatureHelp(),
+      params.token
+    ) { access =>
+      val driver = access.compiler()
       val uri = params.uri
       implicit def ctx: Context = driver.currentCtx
 
@@ -274,7 +314,11 @@ class ScalaPresentationCompiler(
   override def didChange(
       params: VirtualFileParams
   ): CompletableFuture[ju.List[Diagnostic]] = {
-    CompletableFuture.completedFuture {
+    compilerAccess.withNonInterruptableCompiler(
+      Nil.asJava,
+      params.token
+    ) { access =>
+      val driver = access.compiler()
       val uri = params.uri
       val sourceFile = toSource(uri, params.text)
       // we need to have a separate reporter otherwise errors are not cleared
@@ -288,23 +332,33 @@ class ScalaPresentationCompiler(
   }
 
   override def didClose(uri: URI): Unit = {
-    driver.close(uri)
+    compilerAccess.withNonInterruptableCompiler(
+      (),
+      EmptyCancelToken
+    ) { access =>
+      access.compiler().close(uri)
+    }
   }
 
   override def withExecutorService(
       executorService: ExecutorService
-  ): PresentationCompiler = this
+  ): PresentationCompiler = {
+    copy(ec = ExecutionContext.fromExecutorService(executorService))
+  }
 
   override def withConfiguration(
       config: PresentationCompilerConfig
-  ): PresentationCompiler = this
+  ): PresentationCompiler = {
+    copy(config = config)
+  }
 
   override def withScheduledExecutorService(
-      scheduledExecutorService: ScheduledExecutorService
-  ): PresentationCompiler = this
+      sh: ScheduledExecutorService
+  ): PresentationCompiler =
+    copy(sh = Some(sh))
 
   def withSearch(search: SymbolSearch): PresentationCompiler = {
-    this
+    copy(search = search)
   }
 
   private def location(p: SourcePosition): Option[Location] = {
@@ -359,32 +413,38 @@ class ScalaPresentationCompiler(
       else
         CompletionItemKind.Field
     }
-    val item = new CompletionItem(completion.label)
-    item.setDetail(completion.description)
+    val colonNotNeeded = completion.symbols.headOption.exists(_.is(Method))
+    val colon = if (colonNotNeeded) "" else ": "
+    val label = s"${completion.label}$colon${completion.description}"
+    val item = new CompletionItem(label)
 
+    item.setFilterText(completion.label)
+    // TODO we should use edit text
+    item.setInsertText(completion.label)
     val documentation = for {
       sym <- completion.symbols
       doc <- ParsedComment.docOf(sym)
     } yield doc
 
     if (documentation.nonEmpty) {
-      item.setDocumentation(hoverContent(None, documentation))
+      item.setDocumentation(hoverContent(None, None, documentation))
     }
-
-    // item.setDeprecated(completion.symbols.forall(_.isDeprecated))
+    item.setDeprecated(completion.symbols.forall(_.isDeprecated))
     completion.symbols.headOption
       .foreach(s => item.setKind(completionItemKind(s)))
     item
   }
 
   private def hoverContent(
+      keywordName: Option[String],
       typeInfo: Option[String],
       comments: List[ParsedComment]
   )(implicit ctx: Context): MarkupContent = {
     val buf = new StringBuilder
     typeInfo.foreach { info =>
+      val keyName = keywordName.getOrElse("")
       buf.append(s"""```scala
-                    |$info
+                    |$keyName$info
                     |```
                     |""".stripMargin)
     }
@@ -453,7 +513,6 @@ class ScalaPresentationCompiler(
             DiagnosticSeverity.Error
         }
       }
-
       val message = mc.contained()
       val code = message.errorId.errorNumber.toString
       range(mc.pos).map(r =>
@@ -466,17 +525,6 @@ class ScalaPresentationCompiler(
         )
       )
     }
-
-  case class DefinitionResultImpl(
-      symbol: String,
-      locations: java.util.List[Location]
-  ) extends DefinitionResult
-
-  object DefinitionResultImpl {
-    def empty: DefinitionResult = {
-      DefinitionResultImpl("", java.util.Collections.emptyList())
-    }
-  }
 
   private def toSource(uri: URI, sourceCode: String): SourceFile = {
     val path = Paths.get(uri)

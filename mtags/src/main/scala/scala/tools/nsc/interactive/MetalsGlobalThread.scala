@@ -1,6 +1,6 @@
 package scala.tools.nsc.interactive
 
-import scala.meta.internal.pc.InterruptException
+import scala.meta.internal.pc.common.InterruptException
 
 /**
  * Adapation of PresentationCompilerThread from scala/scala.
