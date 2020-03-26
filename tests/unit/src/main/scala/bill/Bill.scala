@@ -328,10 +328,16 @@ object Bill {
     }
     override def buildTargetScalaTestClasses(
         params: ScalaTestClassesParams
-    ): CompletableFuture[ScalaTestClassesResult] = ???
+    ): CompletableFuture[ScalaTestClassesResult] =
+      CompletableFuture.completedFuture {
+        new ScalaTestClassesResult(Nil.asJava)
+      }
     override def buildTargetScalaMainClasses(
         params: ScalaMainClassesParams
-    ): CompletableFuture[ScalaMainClassesResult] = ???
+    ): CompletableFuture[ScalaMainClassesResult] =
+      CompletableFuture.completedFuture {
+        new ScalaMainClassesResult(Nil.asJava)
+      }
   }
 
   def myClassLoader: ClassLoader =

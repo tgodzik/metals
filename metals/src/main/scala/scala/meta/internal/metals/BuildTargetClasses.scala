@@ -27,7 +27,6 @@ final class BuildTargetClasses(
   }
 
   def invalidate(target: b.BuildTargetIdentifier): Unit = {
-    pprint.log("invalidating")
     index.put(target, new Classes)
   }
 
@@ -44,7 +43,6 @@ final class BuildTargetClasses(
   private def findClassesBy[A](
       f: Classes => Option[A]
   ): List[(A, b.BuildTargetIdentifier)] = {
-    pprint.log(index)
     index
       .mapValues(f)
       .toList

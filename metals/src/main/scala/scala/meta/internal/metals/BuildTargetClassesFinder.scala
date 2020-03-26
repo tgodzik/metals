@@ -31,7 +31,6 @@ class BuildTargetClassesFinder(
             new BuildTargetNotFoundException(targetName)
           )
         } { target =>
-          pprint.log(buildTargetClasses)
           buildTargetClasses
             .classesOf(target.getId())
             .mainClasses
@@ -56,8 +55,6 @@ class BuildTargetClassesFinder(
       buildTarget: Option[String]
   ): Try[List[(String, b.BuildTarget)]] =
     buildTarget.fold {
-
-      pprint.log(buildTargetClasses)
       val classes =
         buildTargetClasses.findTestClassByName(className).collect {
           case (clazz, BuildTargetIdOf(buildTarget)) => (clazz, buildTarget)

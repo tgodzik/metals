@@ -72,13 +72,17 @@ class WorkspaceSymbolLspSuite extends BaseLspSuite("workspace-symbol") {
           |}
           |""".stripMargin,
         preInitialized = { () =>
-          request = Future
-            .sequence(1.to(10).map { _ =>
-              server.server
-                .workspaceSymbol(new WorkspaceSymbolParams("PazQux.I"))
-                .asScala
-                .map(_.asScala.toList)
-            })
+          request = server
+            .didOpen("a/src/main/scala/a/b/A.scala")
+            .flatMap(_ =>
+              Future
+                .sequence(1.to(10).map { _ =>
+                  server.server
+                    .workspaceSymbol(new WorkspaceSymbolParams("PazQux.I"))
+                    .asScala
+                    .map(_.asScala.toList)
+                })
+            )
             .map(_.toList)
           Thread.sleep(10) // take a moment to delay
           Future.successful(())
