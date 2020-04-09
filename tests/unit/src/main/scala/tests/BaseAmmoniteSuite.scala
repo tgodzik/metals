@@ -313,6 +313,54 @@ abstract class BaseAmmoniteSuite(scalaVersion: String)
     } yield ()
   }
 
+  test("ignore build.sc") {
+    for {
+      _ <- server.initialize(
+        s"""
+           |/metals.json
+           |{
+           |  "a": {
+           |    "scalaVersion": "$scalaVersion"
+           |  }
+           |}
+           |/project/build.properties
+           |sbt.version=1.3.8
+           |/build.sbt
+           | // dummy sbt project, metals assumes a mill project else, and mill import seems flaky
+           |lazy val a = project
+           |  .settings(
+           |    scalaVersion := "$scalaVersion"
+           |  )
+           |/main.sc
+           | // scala $scalaVersion
+           |val n = 2
+           |/build.sc
+           |import mill._, scalalib._, publish._
+           |""".stripMargin
+      )
+      _ <- server.didOpen("main.sc")
+      _ <- server.server.ammonite.maybeImport(server.toPath("main.sc"))
+
+      messagesForScript = {
+        val msgs = server.client.messageRequests.asScala.toVector
+        server.client.messageRequests.clear()
+        msgs
+      }
+      _ = assert(
+        messagesForScript.contains(Messages.ImportAmmoniteScript.message)
+      )
+
+      _ <- server.didOpen("build.sc")
+      _ <- server.server.ammonite.maybeImport(server.toPath("build.sc"))
+
+      messagesForBuildSc = server.client.messageRequests.asScala.toVector
+      _ = assert(
+        !messagesForBuildSc.contains(Messages.ImportAmmoniteScript.message)
+      )
+
+    } yield ()
+  }
+
   private def expectDiagnostics(
       path: String,
       expectedDiagnostics: String
