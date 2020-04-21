@@ -317,9 +317,16 @@ class Compilers(
       _ = {
         if (!isSupported) {
           scribe.warn(s"unsupported Scala ${info.scalaVersion}")
+          val fallbackVersion =
+            ScalaVersions.recommendedVersion(info.scalaVersion)
+          // TODO copy
+          info.scalaInfo.setScalaVersion(fallbackVersion)
+          info.scalaInfo.setScalaBinaryVersion(
+            ScalaVersions.scalaBinaryVersionFromFullVersion(fallbackVersion)
+          )
+          scribe.warn(s"Falling back to $fallbackVersion")
         }
       }
-      if isSupported
       scalac <- buildTargets.scalacOptions(target)
     } yield {
       jcache.computeIfAbsent(

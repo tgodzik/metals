@@ -66,6 +66,7 @@ final class RunTestCodeLens(
         main ++ tests
       }
       if commands.nonEmpty
+      _ = pprint.log(distance)
       range <- occurrence.range
         .flatMap(r => distance.toRevised(r.toLSP))
         .toList
