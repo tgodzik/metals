@@ -997,6 +997,7 @@ class MetalsLanguageServer(
     paths.foreach { path =>
       fingerprints.add(path, FileIO.slurp(path, charset))
     }
+
     Future
       .sequence(
         List(
