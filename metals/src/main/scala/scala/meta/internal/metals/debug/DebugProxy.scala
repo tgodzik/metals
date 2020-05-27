@@ -15,6 +15,7 @@ import scala.meta.internal.metals.debug.DebugProtocol.OutputNotification
 import scala.meta.internal.metals.debug.DebugProtocol.RestartRequest
 import scala.meta.internal.metals.debug.DebugProtocol.SetBreakpointRequest
 import scala.meta.internal.metals.debug.DebugProxy._
+import scala.meta.internal.mtags.Semanticdbs
 
 import org.eclipse.lsp4j.debug.SetBreakpointsResponse
 import org.eclipse.lsp4j.jsonrpc.MessageConsumer
@@ -24,7 +25,8 @@ private[debug] final class DebugProxy(
     sessionName: String,
     sourcePathProvider: SourcePathProvider,
     client: RemoteEndpoint,
-    server: ServerAdapter
+    server: ServerAdapter,
+    semanticdbs: Semanticdbs
 )(implicit ec: ExecutionContext) {
   private val exitStatus = Promise[ExitStatus]()
   @volatile private var outputTerminated = false
@@ -34,7 +36,7 @@ private[debug] final class DebugProxy(
   private val adapters = new MetalsDebugAdapters
 
   private val handleSetBreakpointsRequest =
-    new SetBreakpointsRequestHandler(server, adapters)
+    new SetBreakpointsRequestHandler(server, adapters, semanticdbs)
 
   lazy val listen: Future[ExitStatus] = {
     scribe.info(s"Starting debug proxy for [$sessionName]")
@@ -136,7 +138,8 @@ private[debug] object DebugProxy {
       name: String,
       sourcePathProvider: SourcePathProvider,
       awaitClient: () => Future[Socket],
-      connectToServer: () => Future[Socket]
+      connectToServer: () => Future[Socket],
+      semanticdbs: Semanticdbs
   )(implicit ec: ExecutionContext): Future[DebugProxy] = {
     for {
       server <- connectToServer()
@@ -148,7 +151,13 @@ private[debug] object DebugProxy {
         .map(new SocketEndpoint(_))
         .map(endpoint => withLogger(endpoint, DebugProtocol.clientName))
         .map(new MessageIdAdapter(_))
-    } yield new DebugProxy(name, sourcePathProvider, client, server)
+    } yield new DebugProxy(
+      name,
+      sourcePathProvider,
+      client,
+      server,
+      semanticdbs
+    )
   }
 
   private def withLogger(

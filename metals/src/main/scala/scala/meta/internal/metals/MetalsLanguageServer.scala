@@ -387,7 +387,8 @@ class MetalsLanguageServer(
       compilations,
       languageClient,
       buildClient,
-      statusBar
+      statusBar,
+      semanticdbs
     )
     referencesProvider = new ReferenceProvider(
       workspace,

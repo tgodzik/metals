@@ -5,8 +5,9 @@ import scala.concurrent.Future
 import scala.meta.internal.metals.JvmSignatures
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.mtags.Mtags
+import scala.meta.internal.mtags.Semanticdbs
 import scala.meta.internal.semanticdb.Language
-import scala.meta.internal.semanticdb.SymbolInformation
+import scala.meta.internal.semanticdb.Scala._
 import scala.meta.internal.semanticdb.SymbolOccurrence
 
 import org.eclipse.lsp4j.debug.SetBreakpointsArguments
@@ -16,10 +17,10 @@ import org.eclipse.lsp4j.debug.SourceBreakpoint
 
 private[debug] final class SetBreakpointsRequestHandler(
     server: ServerAdapter,
-    adapters: MetalsDebugAdapters
+    adapters: MetalsDebugAdapters,
+    semanticdbs: Semanticdbs
 )(implicit ec: ExecutionContext) {
 
-  // TODO: https://github.com/scalameta/metals/issues/1195
   def apply(
       request: SetBreakpointsArguments
   ): Future[SetBreakpointsResponse] = {
@@ -27,20 +28,18 @@ private[debug] final class SetBreakpointsRequestHandler(
       adapters.adaptPathForServer(request.getSource.getPath).toAbsolutePath
 
     val originalSource = DebugProtocol.copy(request.getSource)
-    val topLevels = Mtags.allToplevels(path.toInput)
+    def topLevels = Mtags.allToplevels(path.toInput)
     val occurrences = path.toLanguage match {
       case Language.JAVA =>
-        def isTypeSymbol(symbol: SymbolInformation): Boolean = {
-          val kind = symbol.kind
-          kind.isClass || kind.isInterface // enum is of `class` kind
-        }
-
         // make sure only type symbols are under consideration,
         // as static methods are also included in top-levels
-        val isType = topLevels.symbols.filter(isTypeSymbol).map(_.symbol).toSet
-        topLevels.occurrences.filter(occ => isType(occ.symbol))
-      case _ =>
         topLevels.occurrences
+      case _ =>
+        semanticdbs
+          .textDocument(path)
+          .documentIncludingStale
+          .map(_.occurrences)
+          .getOrElse(topLevels.occurrences)
     }
 
     val groups = request.getBreakpoints.groupBy { breakpoint =>
@@ -108,9 +107,12 @@ private[debug] final class SetBreakpointsRequestHandler(
   private def distanceFrom(
       breakpoint: SourceBreakpoint
   ): SymbolOccurrence => Long = { occ =>
-    val startLine = occ.range.fold(Int.MaxValue)(_.startLine)
-    val breakpointLine = adapters.adaptLine(breakpoint.getLine)
-    if (startLine > breakpointLine) Long.MaxValue
-    else breakpointLine - startLine
+    if (occ.symbol.isLocal || !occ.role.isDefinition) { Long.MaxValue }
+    else {
+      val startLine = occ.range.fold(Int.MaxValue)(_.startLine)
+      val breakpointLine = adapters.adaptLine(breakpoint.getLine)
+      if (startLine > breakpointLine) Long.MaxValue
+      else breakpointLine - startLine
+    }
   }
 }

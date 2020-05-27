@@ -33,6 +33,7 @@ import scala.meta.internal.metals.MetalsBuildClient
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.MetalsLanguageClient
 import scala.meta.internal.metals.StatusBar
+import scala.meta.internal.mtags.Semanticdbs
 
 import ch.epfl.scala.bsp4j.BuildTargetIdentifier
 import ch.epfl.scala.{bsp4j => b}
@@ -51,7 +52,8 @@ class DebugProvider(
     compilations: Compilations,
     languageClient: MetalsLanguageClient,
     buildClient: MetalsBuildClient,
-    statusBar: StatusBar
+    statusBar: StatusBar,
+    semanticdbs: Semanticdbs
 ) {
 
   lazy val buildTargetClassesFinder = new BuildTargetClassesFinder(
@@ -96,7 +98,13 @@ class DebugProvider(
           targets.toList
         )
         DebugProxy
-          .open(sessionName, sourcePathProvider, awaitClient, connectToServer)
+          .open(
+            sessionName,
+            sourcePathProvider,
+            awaitClient,
+            connectToServer,
+            semanticdbs
+          )
       }
       val server = new DebugServer(sessionName, uri, proxyFactory)
 
