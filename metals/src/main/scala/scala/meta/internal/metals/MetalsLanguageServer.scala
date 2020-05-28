@@ -1098,7 +1098,22 @@ class MetalsLanguageServer(
   def rangeFormatting(
       params: DocumentRangeFormattingParams
   ): CompletableFuture[util.List[TextEdit]] =
-    CancelTokens.future { token => compilers.rangeFormatting(params) }
+    CancelTokens.future { token =>
+      Future
+        .sequence(
+          List(
+            compilers.rangeFormatting(params).map(_.asScala),
+            formattingProvider
+              .format(
+                params.getTextDocument.getUri.toAbsolutePath,
+                token,
+                Some(params.getRange())
+              )
+              .map(_.asScala)
+          )
+        )
+        .map(_.flatten.asJava)
+    }
 
   @JsonRequest("textDocument/prepareRename")
   def prepareRename(

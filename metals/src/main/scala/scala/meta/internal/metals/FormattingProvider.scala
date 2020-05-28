@@ -26,6 +26,9 @@ import org.eclipse.{lsp4j => l}
 import org.scalafmt.interfaces.PositionException
 import org.scalafmt.interfaces.Scalafmt
 import org.scalafmt.interfaces.ScalafmtReporter
+import org.eclipse.lsp4j.TextEdit
+import scala.collection.mutable
+import scala.meta.inputs.Position
 
 /**
  * Implement text formatting using Scalafmt
@@ -80,7 +83,8 @@ final class FormattingProvider(
 
   def format(
       path: AbsolutePath,
-      token: CancelChecker
+      token: CancelChecker,
+      range: Option[l.Range] = None
   ): Future[util.List[l.TextEdit]] = {
     scalafmt = scalafmt.withReporter(activeReporter)
     reset(token)
@@ -88,12 +92,12 @@ final class FormattingProvider(
     if (!scalafmtConf.isFile) {
       handleMissingFile(scalafmtConf).map {
         case true =>
-          runFormat(path, input).asJava
+          runFormat(path, input, range).asJava
         case false =>
           Collections.emptyList[l.TextEdit]()
       }
     } else {
-      val result = runFormat(path, input)
+      val result = runFormat(path, input, range)
       if (token.isCancelled) {
         statusBar.addMessage(
           s"${icons.info}Scalafmt cancelled by editor, try saving file again"
@@ -104,7 +108,8 @@ final class FormattingProvider(
           // Wait until "update .scalafmt.conf" dialogue has completed
           // before returning future.
           promise.future.map {
-            case true if !token.isCancelled => runFormat(path, input).asJava
+            case true if !token.isCancelled =>
+              runFormat(path, input, range).asJava
             case _ => result.asJava
           }
         case None =>
@@ -113,13 +118,68 @@ final class FormattingProvider(
     }
   }
 
-  private def runFormat(path: AbsolutePath, input: Input): List[l.TextEdit] = {
+  private def runFormat(
+      path: AbsolutePath,
+      input: Input,
+      range: Option[l.Range]
+  ): List[l.TextEdit] = {
     val fullDocumentRange = Position.Range(input, 0, input.chars.length).toLSP
     val formatted = scalafmt.format(scalafmtConf.toNIO, path.toNIO, input.text)
+
     if (formatted != input.text) {
-      List(new l.TextEdit(fullDocumentRange, formatted))
+      range match {
+        case Some(value) =>
+          findRangeTextEdit(formatted, input, value)
+        case None =>
+          List(new l.TextEdit(fullDocumentRange, formatted))
+      }
+
     } else {
       Nil
+    }
+  }
+
+  private def findRangeTextEdit(
+      formatted: String,
+      input: Input,
+      range: l.Range
+  ) = {
+    val tokenizedFormatted = Trees.defaultDialect(formatted).tokenize.toOption
+    val tokenizedOriginal = Trees.defaultDialect(input).tokenize.toOption
+    (tokenizedOriginal, tokenizedFormatted) match {
+      case (Some(origTokens), Some(fmtTokens)) =>
+        val end = range.getEnd().toMeta(input)
+        val start = range.getStart().toMeta(input)
+        var current = 0
+        var i = 0
+        var j = 0
+        val result = new StringBuilder()
+        val rangeTokens = new mutable.ListBuffer[Token]
+        while (current < end.end && i < origTokens.size && j < fmtTokens.size) {
+          while (origTokens(i).isWhiteSpaceOrComment) i += 1
+          while (fmtTokens(j).isWhiteSpaceOrComment) {
+            if (current >= start.start && current < end.end)
+              result.append(fmtTokens(j).text)
+            j += 1
+          }
+          val token = origTokens(i)
+          current = token.start
+          if (token.start >= start.start && token.start < end.end) {
+            result.append(fmtTokens(j).text)
+            rangeTokens.append(token)
+          }
+          i += 1
+          j += 1
+        }
+        val res = result.toString()
+        val rangeStart = rangeTokens(0).start
+        val rangeEnd = rangeTokens.last.end
+
+        val newRange = Position.Range(input, rangeStart, rangeEnd)
+
+        List(new TextEdit(newRange.toLSP, res.trim()))
+      case _ =>
+        Nil
     }
   }
 

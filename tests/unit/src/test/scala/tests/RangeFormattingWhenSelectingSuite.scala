@@ -1,9 +1,36 @@
 package tests
 
 import munit.Location
+import munit.TestOptions
+import scala.meta.internal.metals.{BuildInfo => V}
 
 class RangeFormattingWhenSelectingSuite
     extends BaseLspSuite("rangeFormatting") {
+
+  check(
+    "part-line",
+    s"""
+       |object Main {
+       |  <<val abc =   1
+       |  >>def method = {
+       |
+       |}
+       |}""".stripMargin,
+    None,
+    s"""
+       |object Main {
+       |  val abc = 1
+       |  def method = {
+       |
+       |}
+       |}""".stripMargin
+  )
+
+  val str = """|first line
+               |second line
+               |third line
+               |fourth line""".stripMargin
+
   check(
     "start-misindent-line",
     s"""
@@ -85,7 +112,7 @@ class RangeFormattingWhenSelectingSuite
   )
 
   check(
-    "entire-string",
+    "entire-string".ignore,
     s"""
        |object Main {
        |  <<val str = '''|first line
@@ -131,7 +158,7 @@ class RangeFormattingWhenSelectingSuite
   )
 
   def check(
-      name: String,
+      name: TestOptions,
       testCase: String,
       paste: Option[String],
       expectedCase: String
@@ -150,6 +177,8 @@ class RangeFormattingWhenSelectingSuite
         _ <- server.initialize(
           s"""/metals.json
              |{"a":{}}
+             |/.scalafmt.conf
+             |version = ${V.scalafmtVersion}
              |/a/src/main/scala/a/Main.scala
       """.stripMargin + base
         )
