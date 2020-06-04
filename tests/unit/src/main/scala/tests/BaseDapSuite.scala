@@ -17,6 +17,10 @@ import ch.epfl.scala.bsp4j.DebugSessionParamsDataKind
 import ch.epfl.scala.bsp4j.ScalaMainClass
 import munit.GenericBeforeEach
 import org.eclipse.lsp4j.debug.SetBreakpointsResponse
+import munit.TestOptions
+import munit.Location
+import scala.meta.internal.metals.debug.DebugStep._
+import scala.meta.internal.metals.debug.StepNavigator
 
 abstract class BaseDapSuite(suiteName: String) extends BaseLspSuite(suiteName) {
 
@@ -75,4 +79,48 @@ abstract class BaseDapSuite(suiteName: String) extends BaseLspSuite(suiteName) {
         }
     }
   }
+
+  def scalaVersion = BuildInfo.scalaVersion
+
+  def assertBreakpoints(
+      name: TestOptions,
+      main: Option[String] = None
+  )(
+      source: String
+  )(implicit loc: Location): Unit = {
+    test(name) {
+
+      cleanWorkspace()
+      val workspaceLayout = DebugWorkspaceLayout(source)
+      val layout =
+        s"""|/metals.json
+            |{ 
+            |  "a": {"scalaVersion": "$scalaVersion"},  "b": {"scalaVersion": "$scalaVersion"} 
+            |}
+            |$workspaceLayout
+            |""".stripMargin
+
+      val expectedBreakpoints = workspaceLayout.files.flatMap { file =>
+        file.breakpoints.map(b => Breakpoint(file.relativePath, b.startLine))
+      }
+
+      val navigator = expectedBreakpoints.foldLeft(StepNavigator(workspace)) {
+        (navigator, breakpoint) =>
+          navigator.at(breakpoint.relativePath, breakpoint.line + 1)(Continue)
+      }
+
+      for {
+        _ <- server.initialize(layout)
+        _ = assertNoDiagnostics()
+        debugger <- debugMain("a", main.getOrElse("a.Main"), navigator)
+        _ <- debugger.initialize
+        _ <- debugger.launch
+        _ <- setBreakpoints(debugger, workspaceLayout)
+        _ <- debugger.configurationDone
+        _ <- debugger.shutdown
+      } yield ()
+    }
+  }
+
+  private final case class Breakpoint(relativePath: String, line: Int)
 }

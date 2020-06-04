@@ -54,6 +54,7 @@ final class RunTestCodeLens(
   ): Seq[l.CodeLens] = {
     for {
       occurrence <- textDocument.occurrences
+      _ = pprint.log(occurrence)
       if occurrence.role.isDefinition
       symbol = occurrence.symbol
       commands = {

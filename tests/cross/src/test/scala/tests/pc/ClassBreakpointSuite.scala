@@ -10,6 +10,7 @@ import scala.meta.internal.metals.EmptyCancelToken
 
 import munit.TestOptions
 import tests.BasePCSuite
+import tests.BuildInfoVersions
 
 class ClassBreakpointSuite extends BasePCSuite {
 
@@ -111,6 +112,51 @@ class ClassBreakpointSuite extends BasePCSuite {
        |}
        |""".stripMargin,
     "a.b.c.package$"
+  )
+
+  check(
+    "method-dotty".tag(RunForScalaVersion(BuildInfoVersions.scala3Versions)),
+    """|package a.b
+       |def method() = {
+       |>>  println(0)
+       |}
+       |""".stripMargin,
+    "a.b.Main$package"
+  )
+
+  // note For anonymous class/objects we need to return the symbol that contains it
+  check(
+    "method-object-dotty".tag(
+      RunForScalaVersion(BuildInfoVersions.scala3Versions)
+    ),
+    """|package a.b
+       |
+       |@main 
+       |def helloWorld(): Unit = {
+       |  object Hello{
+       |    def run() = {
+       |>>    println("Hello world")
+       |    }
+       |  }
+       |  Hello.run()
+       |}
+       |""".stripMargin,
+    "a.b.Main$package"
+  )
+
+  check(
+    "anon",
+    """|package a.b
+       |
+       |class HelloWorld extends App{
+       |  def run() = {
+       |    object Hello{ val greet = "hello" }
+       |>>  println(Hello.greet)
+       |  }
+       |  run()
+       |}
+       |""".stripMargin,
+    "a.b.HelloWorld"
   )
 
   def check(
