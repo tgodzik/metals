@@ -150,13 +150,62 @@ class ClassBreakpointSuite extends BasePCSuite {
        |
        |class HelloWorld extends App{
        |  def run() = {
-       |    object Hello{ val greet = "hello" }
-       |>>  println(Hello.greet)
+       |    object Hello{ 
+       |      val greet = "hello" 
+       |>>    println(Hello.greet)
+       |    }
+       |    Hello.greet
        |  }
        |  run()
        |}
        |""".stripMargin,
-    "a.b.HelloWorld"
+    "a.b.HelloWorld$Hello$1$"
+  )
+
+  check(
+    "anon2",
+    """|package a.b
+       |
+       |class HelloWorld extends App{
+       |  def run() = {
+       |    object Hello{ 
+       |      val greet = "hello" 
+       |>>    println(Hello.greet)
+       |    }
+       |    Hello.greet
+       |  }
+       |  run()
+       |}
+       |""".stripMargin,
+    "a.b.HelloWorld$Hello$1$"
+  )
+
+  check(
+    "apply",
+    """|package a.b
+       |
+       |object Bar {
+       |  def apply(): Boolean = {
+       |>>  true
+       |  }
+       |}
+       |
+       |""".stripMargin,
+    "a.b.Bar$"
+  )
+
+  check(
+    "unapply",
+    """|package a.b
+       |
+       |object Bar {
+       |  def unapply(any: Any): Boolean = {
+       |>>  true
+       |  }
+       |}
+       |
+       |""".stripMargin,
+    "a.b.Bar$"
   )
 
   def check(

@@ -314,6 +314,24 @@ class BreakpointDapSuite extends BaseDapSuite("debug-breakpoint") {
                 |""".stripMargin
   )
 
+  assertBreakpoints("nested-anon".only)(
+    source = """|/a/src/main/scala/a/Main.scala
+                |package a
+                |
+                |object Main extends App{
+                |  def run() = {
+                |    object Hello{ 
+                |      val greet = "hello" 
+                |>>    println(greet)
+                |    }
+                |    Hello.greet
+                |  }
+                |  run()
+                |  System.exit(0)
+                |}
+                |""".stripMargin
+  )
+
   assertBreakpoints("nested class")(
     source = """|/a/src/main/scala/a/Main.scala
                 |package a
