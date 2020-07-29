@@ -521,6 +521,31 @@ object MetalsEnrichments
     def toLSP: l.Range =
       new l.Range(range.getStart.toLSP, range.getEnd.toLSP)
   }
+  implicit class XtensionRangeSemanticdb(range: s.Range) {
+
+    def findName(text: String): String = {
+      var i = 0
+      var max = 0
+      while (max < range.startLine) {
+        if (text.charAt(i) == '\n') max += 1
+        i += 1
+      }
+      val start = i + range.startCharacter
+      val end = i + range.endCharacter
+      text.substring(start, end)
+    }
+
+    def orCorrectSymbol[T](
+        source: String,
+        isSymbol: Set[String],
+        original: T
+    ): Option[T] = {
+      pprint.log(range.findName(source))
+      if (isSymbol(range.findName(source)))
+        Some(original)
+      else None
+    }
+  }
 
   implicit class XtensionSymbolOccurrenceProtocol(occ: s.SymbolOccurrence) {
     def toLocation(uri: String): l.Location = {

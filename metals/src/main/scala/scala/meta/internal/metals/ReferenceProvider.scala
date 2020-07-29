@@ -260,10 +260,19 @@ final class ReferenceProvider(
   ): Seq[Location] = {
     val buf = Seq.newBuilder[Location]
     def add(range: s.Range): Unit = {
-      val revised = distance.toRevised(range.startLine, range.startCharacter)
+
+      val revised = distance
+        .toRevised(range.startLine, range.startCharacter)
       val dirtyLocation = range.toLocation(uri)
+      def orCorrect =
+        range.orCorrectSymbol(
+          // TODO maybe not buffers
+          buffers.get(uri.toAbsolutePath).get,
+          isSymbol,
+          dirtyLocation
+        )
       for {
-        location <- revised.toLocation(dirtyLocation)
+        location <- revised.toLocation(dirtyLocation).orElse(orCorrect)
       } {
         buf += location
       }
@@ -309,7 +318,7 @@ final class ReferenceProvider(
       text: String,
       symbol: String
   ): Option[s.Range] = {
-    val name = findName(range, text)
+    val name = range.findName(text)
     val isBackticked = name.charAt(0) == '`'
     val realName =
       if (isBackticked) name.substring(1, name.length() - 1)
@@ -326,18 +335,6 @@ final class ReferenceProvider(
     } else {
       None
     }
-  }
-
-  private def findName(range: s.Range, text: String): String = {
-    var i = 0
-    var max = 0
-    while (max < range.startLine) {
-      if (text.charAt(i) == '\n') max += 1
-      i += 1
-    }
-    val start = i + range.startCharacter
-    val end = i + range.endCharacter
-    text.substring(start, end)
   }
 
   private def resizeReferencedPackages(): Unit = {

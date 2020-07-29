@@ -146,11 +146,14 @@ final class DefinitionProvider(
       occurrence <-
         snapshot.occurrences
           .find(_.encloses(queryPosition, true))
-          // In case of macros we might need to get the postion from the presentation compiler
-          .orElse(fromMtags(source, queryPosition))
     } yield occurrence
 
-    ResolvedSymbolOccurrence(sourceDistance, occurrence)
+    // In case of macros we might need to get the postion from the presentation compiler
+    val fromCompiler = occurrence.orElse(fromMtags(source, dirtyPosition))
+
+    pprint.log(fromMtags(source, dirtyPosition))
+    pprint.log(fromCompiler)
+    ResolvedSymbolOccurrence(sourceDistance, fromCompiler)
   }
 
   private def definitionFromSnapshot(
@@ -182,6 +185,11 @@ final class DefinitionProvider(
   }
 
   private def fromMtags(source: AbsolutePath, dirtyPos: Position) = {
+    pprint.log(
+      Mtags
+        .allToplevels(source.toInput)
+        .occurrences
+    )
     Mtags
       .allToplevels(source.toInput)
       .occurrences

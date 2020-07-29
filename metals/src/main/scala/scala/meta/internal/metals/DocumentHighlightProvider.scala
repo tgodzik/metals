@@ -37,7 +37,17 @@ final class DocumentHighlightProvider(
       curr <- doc.occurrences
       if curr.symbol == occ.symbol || alternatives(curr.symbol)
       range <- curr.range
-      revised <- positionOccurrence.distance.toRevised(range.toLSP)
+      _ = pprint.log(range)
+      revised <-
+        positionOccurrence.distance
+          .toRevised(range.toLSP)
+          .orElse(
+            range.orCorrectSymbol(
+              source.readText,
+              alternatives + occ.symbol,
+              range.toLSP
+            )
+          )
       kind =
         if (curr.role.isDefinition) {
           DocumentHighlightKind.Write
