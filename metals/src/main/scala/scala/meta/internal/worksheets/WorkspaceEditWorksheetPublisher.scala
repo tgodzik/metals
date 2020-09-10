@@ -28,7 +28,8 @@ class WorkspaceEditWorksheetPublisher(buffers: Buffers)
   override def publish(
       languageClient: MetalsLanguageClient,
       path: AbsolutePath,
-      worksheet: EvaluatedWorksheet
+      worksheet: EvaluatedWorksheet,
+      margin: Int
   ): Unit = {
     val rendered = render(path, worksheet)
     publish(languageClient, path, rendered)

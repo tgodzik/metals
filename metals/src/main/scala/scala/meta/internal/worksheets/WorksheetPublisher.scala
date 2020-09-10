@@ -12,7 +12,8 @@ trait WorksheetPublisher {
   def publish(
       languageClient: MetalsLanguageClient,
       path: AbsolutePath,
-      worksheet: EvaluatedWorksheet
+      worksheet: EvaluatedWorksheet,
+      margin: Int
   ): Unit
 
   def hover(path: AbsolutePath, position: Position): Option[Hover]

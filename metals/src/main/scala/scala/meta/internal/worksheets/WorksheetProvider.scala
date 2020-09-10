@@ -108,9 +108,10 @@ class WorksheetProvider(
       path: AbsolutePath,
       token: CancelToken
   ): Future[Unit] = {
-    evaluateAsync(path, token).map(
-      _.foreach(publisher.publish(languageClient, path, _))
-    )
+    evaluateAsync(path, token).collect {
+      case Some((worksheet, margin)) =>
+        publisher.publish(languageClient, path, worksheet, margin)
+    }
   }
 
   /**
@@ -125,15 +126,16 @@ class WorksheetProvider(
   private def evaluateAsync(
       path: AbsolutePath,
       token: CancelToken
-  ): Future[Option[EvaluatedWorksheet]] = {
-    val result = new CompletableFuture[Option[EvaluatedWorksheet]]()
+  ): Future[Option[(EvaluatedWorksheet, Int)]] = {
+    val result = new CompletableFuture[Option[(EvaluatedWorksheet, Int)]]()
     def completeEmptyResult() = result.complete(None)
     token.onCancel().asScala.foreach { isCancelled =>
       if (isCancelled) {
         completeEmptyResult()
       }
     }
-    val onError: PartialFunction[Throwable, Option[EvaluatedWorksheet]] = {
+    val onError
+        : PartialFunction[Throwable, Option[(EvaluatedWorksheet, Int)]] = {
       case InterruptException() =>
         None
       case e: Throwable =>
@@ -189,7 +191,7 @@ class WorksheetProvider(
    */
   private def interruptThreadOnCancel(
       path: AbsolutePath,
-      result: CompletableFuture[Option[EvaluatedWorksheet]],
+      result: CompletableFuture[Option[(EvaluatedWorksheet, Int)]],
       thread: Thread
   ): Unit = {
     // Last resort, if everything else fails we use `Thread.stop()`.
@@ -252,10 +254,17 @@ class WorksheetProvider(
   private def evaluateWorksheet(
       path: AbsolutePath,
       token: CancelToken
-  ): EvaluatedWorksheet = {
+  ): (EvaluatedWorksheet, Int) = {
     val mdoc = getMdoc(path)
     val input = path.toInputFromBuffers(buffers)
     val relativePath = path.toRelative(workspace)
+    val margin = input.value.split("\n").foldLeft(0) {
+      case (margin, line) =>
+        val newMargin = line.length()
+        if (newMargin > margin)
+          newMargin
+        else margin
+    }
     val worksheet = mdoc.evaluateWorksheet(relativePath.toString(), input.value)
     val classpath = worksheet.classpath().asScala.toList
     val previousDigest = worksheetsDigests.getOrElse(path, "")
@@ -282,7 +291,7 @@ class WorksheetProvider(
       toPublish,
       isReset = true
     )
-    worksheet
+    (worksheet, margin)
   }
 
   private def getMdoc(path: AbsolutePath): Mdoc = {
@@ -332,6 +341,7 @@ class WorksheetProvider(
           .mdoc(info.scalaVersion, info.scalaBinaryVersion)
           .withClasspath(info.fullClasspath.asScala.distinct.asJava)
           .withScalacOptions(scalacOptions)
+          .withScreenWidth(WorksheetProvider.screenWidth)
         mdocs(target) = mdoc
         mdoc
       }
@@ -348,6 +358,8 @@ class WorksheetProvider(
 }
 
 object WorksheetProvider {
+
+  val screenWidth = 100
 
   def worksheetScala3Adjustments(
       originInput: Input.VirtualFile,

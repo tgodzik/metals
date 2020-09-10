@@ -102,7 +102,7 @@ abstract class BaseWorksheetLspSuite(scalaVersion: String)
     } yield ()
   }
 
-  test("render") {
+  test("render".only) {
     for {
       _ <- server.initialize(
         s"""

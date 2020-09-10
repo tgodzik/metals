@@ -23,9 +23,10 @@ class DecorationWorksheetPublisher() extends WorksheetPublisher {
   override def publish(
       languageClient: MetalsLanguageClient,
       path: AbsolutePath,
-      worksheet: EvaluatedWorksheet
+      worksheet: EvaluatedWorksheet,
+      margin: Int
   ): Unit = {
-    val rendered = render(worksheet)
+    val rendered = render(worksheet, margin)
     publish(languageClient, path, rendered)
   }
 
@@ -34,13 +35,21 @@ class DecorationWorksheetPublisher() extends WorksheetPublisher {
     None
 
   private def render(
-      worksheet: EvaluatedWorksheet
+      worksheet: EvaluatedWorksheet,
+      margin: Int
   ): Array[DecorationOptions] = {
     worksheet
       .statements()
       .iterator()
       .asScala
       .map { s =>
+        val additionalMargin = margin - s.position.endColumn
+        val realMargin =
+          if (
+            s.summary()
+              .length() + additionalMargin > WorksheetProvider.screenWidth
+          ) { 0 }
+          else { additionalMargin }
         new DecorationOptions(
           s.position().toLsp,
           new MarkupContent(
@@ -49,9 +58,10 @@ class DecorationWorksheetPublisher() extends WorksheetPublisher {
           ),
           ThemableDecorationInstanceRenderOptions(
             after = ThemableDecorationAttachmentRenderOptions(
-              commentHeader + truncatify(s),
+              contentText = commentHeader + truncatify(s),
               color = "green",
-              fontStyle = "italic"
+              fontStyle = "italic",
+              margin = s"0px 0px 0px ${realMargin}ch"
             )
           )
         )
