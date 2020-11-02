@@ -81,17 +81,33 @@ class Compilers(
       new java.util.HashMap[AbsolutePath, PresentationCompiler]
     )
 
+  private val jfallbackCompilersCache = Collections.synchronizedMap(
+    new java.util.HashMap[String, PresentationCompiler]
+  )
+
   private val cache = jcache.asScala
 
   private val worksheetsCache = jworksheetsCache.asScala
 
+  private val fallbackCompilersCache = jfallbackCompilersCache.asScala
+
   // The "rambo" compiler is used for source files that don't belong to a build target.
-  lazy val ramboCompiler: PresentationCompiler = createStandaloneCompiler(
-    PackageIndex.scalaLibrary,
-    Try(StandaloneSymbolSearch(workspace, buffers, isExcludedPackage))
-      .getOrElse(EmptySymbolSearch),
-    "metals-default"
-  )
+  def fallbackCompiler(
+      scalaVersion: Option[String] = None
+  ): PresentationCompiler = {
+
+    // TODO should ask about version
+    val recommended = scalaVersion
+      .map(ScalaVersions.recommendedVersion)
+      .getOrElse(BuildInfo.scala212)
+
+    createStandaloneCompiler(
+      PackageIndex.scalaLibrary,
+      Try(StandaloneSymbolSearch(workspace, buffers, isExcludedPackage))
+        .getOrElse(EmptySymbolSearch),
+      "metals-default"
+    )
+  }
 
   private def createStandaloneCompiler(
       classpath: Seq[Path],
@@ -119,8 +135,12 @@ class Compilers(
   override def cancel(): Unit = {
     Cancelable.cancelEach(cache.values)(_.shutdown())
     cache.clear()
-    ramboCancelable.cancel()
+    Cancelable.cancelEach(worksheetsCache.values)(_.shutdown())
+    cache.clear()
+    Cancelable.cancelEach(fallbackCompilersCache.values)(_.shutdown())
+    cache.clear()
   }
+
   def restartAll(): Unit = {
     val count = cache.size
     cancel()
@@ -155,7 +175,7 @@ class Compilers(
       token: CancelToken
   ): Future[ju.List[FoldingRange]] = {
     val path = params.getTextDocument.getUri.toAbsolutePath
-    val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
+    val pc = loadCompiler(path, None)
     val input = path.toInputFromBuffers(buffers)
     pc.foldingRange(
       CompilerVirtualFileParams(path.toNIO.toUri, input.value)
@@ -166,7 +186,7 @@ class Compilers(
       params: DocumentOnTypeFormattingParams
   ): Future[ju.List[TextEdit]] = {
     val path = params.getTextDocument.getUri.toAbsolutePath
-    val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
+    val pc = loadCompiler(path, None)
     val input = path.toInputFromBuffers(buffers)
     pc.onTypeFormatting(params, input.value).asScala
   }
@@ -175,7 +195,7 @@ class Compilers(
       params: DocumentRangeFormattingParams
   ): Future[ju.List[TextEdit]] = {
     val path = params.getTextDocument.getUri.toAbsolutePath
-    val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
+    val pc = loadCompiler(path, None)
     val input = path.toInputFromBuffers(buffers)
     pc.rangeFormatting(params, input.value).asScala
   }
@@ -184,7 +204,7 @@ class Compilers(
       params: DocumentSymbolParams
   ): Future[ju.List[DocumentSymbol]] = {
     val path = params.getTextDocument.getUri.toAbsolutePath
-    val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
+    val pc = loadCompiler(path, None)
     val input = path.toInputFromBuffers(buffers)
     pc.documentSymbols(
       CompilerVirtualFileParams(path.toNIO.toUri, input.value)
@@ -192,7 +212,7 @@ class Compilers(
   }
 
   def didClose(path: AbsolutePath): Unit = {
-    val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
+    val pc = loadCompiler(path, None)
     pc.didClose(path.toNIO.toUri())
   }
 
@@ -202,7 +222,7 @@ class Compilers(
       path
         .toInputFromBuffers(buffers)
 
-    val pc = loadCompiler(path, None).getOrElse(ramboCompiler)
+    val pc = loadCompiler(path, None)
     val inputAndAdjust =
       if (
         path.isWorksheet && ScalaVersions.isScala3Version(pc.scalaVersion())
@@ -358,17 +378,14 @@ class Compilers(
     val input = path.toInputFromBuffers(buffers)
     val offset = pos.toMeta(input).start
     val params = CompilerOffsetParams(path.toURI, input.text, offset, token)
-    loadCompiler(path, None) match {
-      case Some(pc) =>
-        pc.enclosingClass(params).asScala.map(_.asScala)
-      case None => Future.successful(None)
-    }
+    val pc = loadCompiler(path, None)
+    pc.enclosingClass(params).asScala.map(_.asScala)
   }
 
   def loadCompiler(
       path: AbsolutePath,
       interactiveSemanticdbs: Option[InteractiveSemanticdbs]
-  ): Option[PresentationCompiler] = {
+  ): PresentationCompiler = {
 
     def fromBuildTarget: Option[PresentationCompiler] = {
       val target = buildTargets
@@ -376,14 +393,16 @@ class Compilers(
         .orElse(interactiveSemanticdbs.flatMap(_.getBuildTarget(path)))
       target match {
         case None =>
-          if (path.isScalaFilename) Some(ramboCompiler)
+          if (path.isScalaFilename) Some(fallbackCompiler())
           else None
         case Some(value) => loadCompiler(value)
       }
     }
 
-    if (path.isWorksheet) loadWorksheetCompiler(path).orElse(fromBuildTarget)
-    else fromBuildTarget
+    val compiler =
+      if (path.isWorksheet) loadWorksheetCompiler(path).orElse(fromBuildTarget)
+      else fromBuildTarget
+    compiler.getOrElse(fallbackCompiler())
   }
 
   def loadWorksheetCompiler(
@@ -504,8 +523,7 @@ class Compilers(
       interactiveSemanticdbs: Option[InteractiveSemanticdbs]
   )(fn: (PresentationCompiler, Position, AdjustLspData) => T): T = {
     val path = params.getTextDocument.getUri.toAbsolutePath
-    val compiler =
-      loadCompiler(path, interactiveSemanticdbs).getOrElse(ramboCompiler)
+    val compiler = loadCompiler(path, interactiveSemanticdbs)
 
     val (input, pos, adjust) =
       sourceAdjustments(
@@ -592,25 +610,34 @@ class Compilers(
       classpath: Seq[Path],
       search: SymbolSearch
   ): PresentationCompiler = {
-    // The metals_2.12 artifact depends on mtags_2.12.x where "x" matches
-    // `mtags.BuildInfo.scalaCompilerVersion`. In the case when
-    // `info.getScalaVersion == mtags.BuildInfo.scalaCompilerVersion` then we
-    // skip fetching the mtags module from Maven.
-    val pc: PresentationCompiler =
-      if (
-        ScalaVersions.isCurrentScalaCompilerVersion(
-          target.scalaInfo.getScalaVersion()
-        )
-      ) {
-        new ScalaPresentationCompiler()
-      } else {
-        embedded.presentationCompiler(target.scalaInfo, scalac)
-      }
+
+    val pc: PresentationCompiler = newCompiler(
+      target.scalaInfo.getScalaVersion(),
+      target.scalaInfo.getJars().asScala.map(_.toAbsolutePath.toNIO).toList
+    )
+
     val options = plugins.filterSupportedOptions(scalac.getOptions.asScala)
     configure(pc, search).newInstance(
       scalac.getTarget.getUri,
       classpath.asJava,
       (log ++ options).asJava
     )
+  }
+
+  /* The metals_2.12 artifact depends on mtags_2.12.x where "x" matches
+   * `mtags.BuildInfo.scalaCompilerVersion`. In the case when
+   * `info.getScalaVersion == mtags.BuildInfo.scalaCompilerVersion` then we
+   *  skip fetching the mtags module from Maven.
+   */
+  private def newCompiler(scalaVersion: String, scalaJars: List[Path]) = {
+    if (
+      ScalaVersions.isCurrentScalaCompilerVersion(
+        scalaVersion
+      )
+    ) {
+      new ScalaPresentationCompiler()
+    } else {
+      embedded.presentationCompiler(scalaVersion, scalaJars)
+    }
   }
 }

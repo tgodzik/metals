@@ -12,8 +12,6 @@ import scala.meta.internal.worksheets.MdocClassLoader
 import scala.meta.io.Classpath
 import scala.meta.pc.PresentationCompiler
 
-import ch.epfl.scala.bsp4j.ScalaBuildTarget
-import ch.epfl.scala.bsp4j.ScalacOptionsItem
 import coursierapi.Dependency
 import coursierapi.Fetch
 import coursierapi.MavenRepository
@@ -58,13 +56,13 @@ final class Embedded(
   }
 
   def presentationCompiler(
-      info: ScalaBuildTarget,
-      scalac: ScalacOptionsItem
+      scalaVersion: String,
+      scalaJars: List[Path]
   ): PresentationCompiler = {
     val classloader = presentationCompilers.getOrElseUpdate(
-      ScalaVersions.dropVendorSuffix(info.getScalaVersion),
+      ScalaVersions.dropVendorSuffix(scalaVersion),
       statusBar.trackSlowTask("Preparing presentation compiler") {
-        Embedded.newPresentationCompilerClassLoader(info, scalac)
+        Embedded.newPresentationCompilerClassLoader(scalaVersion, scalaJars)
       }
     )
     serviceLoader(
@@ -159,6 +157,19 @@ object Embedded {
     Dependency.of("ch.epfl.lamp", s"dotty-library_$binaryVersion", scalaVersion)
   }
 
+  private def scalaCompiler(scalaVersion: String): Dependency =
+    Dependency.of("org.scala-lang", "scala-compiler", scalaVersion)
+
+  private def dottyCompiler(scalaVersion: String): Dependency = {
+    val binaryVersion =
+      ScalaVersions.scalaBinaryVersionFromFullVersion(scalaVersion)
+    Dependency.of(
+      "ch.epfl.lamp",
+      s"dotty-compiler_$binaryVersion",
+      scalaVersion
+    )
+  }
+
   private def mtagsDependency(scalaVersion: String): Dependency =
     Dependency.of(
       "org.scalameta",
@@ -204,6 +215,17 @@ object Embedded {
       classfiers = Seq("sources")
     )
 
+  def downloadScalaCompiler(scalaVersion: String): List[Path] = {
+    val dependency =
+      if (ScalaVersions.isScala3Version(scalaVersion))
+        dottyCompiler(scalaVersion)
+      else scalaCompiler(scalaVersion)
+    downloadDependency(
+      dependency,
+      scalaVersion
+    )
+  }
+
   def downloadDottySources(scalaVersion: String): List[Path] =
     downloadDependency(
       dottyDependency(scalaVersion),
@@ -237,17 +259,15 @@ object Embedded {
   }
 
   def newPresentationCompilerClassLoader(
-      info: ScalaBuildTarget,
-      scalac: ScalacOptionsItem
+      scalaVersion: String,
+      scalaJars: List[Path]
   ): URLClassLoader = {
-    val scalaVersion = ScalaVersions
-      .dropVendorSuffix(info.getScalaVersion)
-    val dep = mtagsDependency(scalaVersion)
-    val jars = fetchSettings(dep, info.getScalaVersion())
+    val strippedScalaVersion = ScalaVersions.dropVendorSuffix(scalaVersion)
+    val dep = mtagsDependency(strippedScalaVersion)
+    val jars = fetchSettings(dep, scalaVersion)
       .fetch()
       .asScala
       .map(_.toPath)
-    val scalaJars = info.getJars.asScala.map(_.toAbsolutePath.toNIO)
     val allJars = Iterator(jars, scalaJars).flatten
     val allURLs = allJars.map(_.toUri.toURL).toArray
     // Share classloader for a subset of types.
