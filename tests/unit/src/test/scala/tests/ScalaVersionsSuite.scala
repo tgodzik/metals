@@ -143,4 +143,13 @@ class ScalaVersionsSuite extends BaseSuite {
         V.scala3
     )
   }
+
+  test("supported-3") {
+    assert(
+      ScalaVersions.isSupportedScalaVersion(
+        "3.0.0-M2-bin-20201108-3938388-NIGHTLY"
+      ) ==
+        true
+    )
+  }
 }
