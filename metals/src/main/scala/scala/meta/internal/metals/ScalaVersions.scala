@@ -13,6 +13,8 @@ object ScalaVersions {
   def dropVendorSuffix(version: String): String = {
     if (isScala3Version(version) && version.contains("NIGHTLY"))
       version
+    else if (isScala3Version(version) && version.contains("SNAPSHOT"))
+      version.replace("-nonbootstrapped", "")
     else
       version.replaceAll("-bin-.*", "")
   }
@@ -22,8 +24,9 @@ object ScalaVersions {
   private val _isSupportedScalaVersion: Set[String] =
     BuildInfo.supportedScalaVersions.toSet
 
-  def isSupportedScalaVersion(version: String): Boolean =
+  def isSupportedScalaVersion(version: String): Boolean = {
     _isSupportedScalaVersion(dropVendorSuffix(version))
+  }
 
   def isDeprecatedScalaVersion(version: String): Boolean =
     _isDeprecatedScalaVersion(dropVendorSuffix(version))
