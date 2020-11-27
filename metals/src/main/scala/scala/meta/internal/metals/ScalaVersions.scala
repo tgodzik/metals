@@ -5,21 +5,28 @@ import scala.meta.internal.semver.SemVer
 
 object ScalaVersions {
 
-  val scala3Milestones: Set[String] = Set("3.0.0-M1", "3.0.0-M2")
+  val scala3Milestones: Set[String] = Set("3.0.0-M1", "3.0.0-M2", "3.0.0-RC1")
 
   /**
    * Non-Lightbend compilers often use a suffix, such as `-bin-typelevel-4`
    */
-  def dropVendorSuffix(version: String): String =
-    version.replaceAll("-bin-.*", "")
+  def dropVendorSuffix(version: String): String = {
+    if (isScala3Version(version) && version.contains("NIGHTLY"))
+      version
+    else if (isScala3Version(version) && version.contains("SNAPSHOT"))
+      version.replace("-nonbootstrapped", "")
+    else
+      version.replaceAll("-bin-.*", "")
+  }
 
   private val _isDeprecatedScalaVersion: Set[String] =
     BuildInfo.deprecatedScalaVersions.toSet
   private val _isSupportedScalaVersion: Set[String] =
     BuildInfo.supportedScalaVersions.toSet
 
-  def isSupportedScalaVersion(version: String): Boolean =
+  def isSupportedScalaVersion(version: String): Boolean = {
     _isSupportedScalaVersion(dropVendorSuffix(version))
+  }
 
   def isDeprecatedScalaVersion(version: String): Boolean =
     _isDeprecatedScalaVersion(dropVendorSuffix(version))

@@ -2,7 +2,7 @@ import scala.collection.mutable
 import scala.sys.process._
 import Tests._
 
-def localSnapshotVersion = "0.9.8-SNAPSHOT"
+def localSnapshotVersion = "0.9.8-dotty"
 def isCI = System.getenv("CI") != null
 
 def isScala211(v: Option[(Long, Long)]): Boolean = v.contains((2, 11))
@@ -214,7 +214,13 @@ lazy val V = new {
   def scala2Versions = nonDeprecatedScala2Versions ++ deprecatedScala2Versions
 
   // Scala 3
-  def nonDeprecatedScala3Versions = Seq(scala3, "3.0.0-M1", "0.27.0-RC1")
+  def nonDeprecatedScala3Versions =
+    Seq(
+      scala3,
+      "3.0.0-M1",
+      "3.0.0-RC1-bin-SNAPSHOT",
+      "0.27.0-RC1"
+    )
   def deprecatedScala3Versions = Seq("0.26.0")
   def scala3Versions = nonDeprecatedScala3Versions ++ deprecatedScala3Versions
 
