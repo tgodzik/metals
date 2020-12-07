@@ -147,7 +147,7 @@ class ScalaVersionsSuite extends BaseSuite {
   test("supported-3") {
     assert(
       ScalaVersions.isSupportedScalaVersion(
-        "3.0.0-M2-bin-SNAPSHOT-nonbootstrapped"
+        "3.0.0-M3-bin-SNAPSHOT-nonbootstrapped"
       ) ==
         true
     )

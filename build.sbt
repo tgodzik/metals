@@ -218,7 +218,9 @@ lazy val V = new {
     Seq(
       scala3,
       "3.0.0-M1",
-      "3.0.0-RC1-bin-SNAPSHOT",
+      "3.0.0-M2",
+      "3.0.0-M3-bin-SNAPSHOT",
+      "3.0.0-RC1-bin-20201202-67d9790-NIGHTLY",
       "0.27.0-RC1"
     )
   def deprecatedScala3Versions = Seq("0.26.0")

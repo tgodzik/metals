@@ -5,7 +5,8 @@ import scala.meta.internal.semver.SemVer
 
 object ScalaVersions {
 
-  val scala3Milestones: Set[String] = Set("3.0.0-M1", "3.0.0-M2", "3.0.0-RC1")
+  def isScala3Milestone(version: String) =
+    version.startsWith("3.0.0-M") || version.startsWith("3.0.0-RC")
 
   /**
    * Non-Lightbend compilers often use a suffix, such as `-bin-typelevel-4`
@@ -85,7 +86,7 @@ object ScalaVersions {
     ) == mtags.BuildInfo.scalaCompilerVersion
 
   def scalaBinaryVersionFromFullVersion(scalaVersion: String): String = {
-    if (scala3Milestones(scalaVersion))
+    if (isScala3Milestone(scalaVersion))
       scalaVersion
     else
       scalaVersion.split('.').take(2).mkString(".")
