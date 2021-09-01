@@ -196,9 +196,26 @@ class SignatureHelpProvider(val compiler: MetalsGlobal) {
             }
           }
           val symbol = treeSymbol(tree)
+          val alternative = symbol.owner.info.member(symbol.name).alternatives
+
+          val found = alternative
+            .map(s => (s, s.info))
+            .find {
+              case (_, t @ MethodType(params, _)) if t.termSymbol != symbol =>
+                params.zip(args).zipWithIndex.forall {
+                  case ((tpeParam, applyParam), index) =>
+                    index == args.size - 1 ||
+                      tpeParam.tpe.widen == applyParam.tpe.widen
+                }
+              case _ => false
+            }
+            .map(_._1)
+
+          val exactSymbol = found.getOrElse(symbol)
+
           for {
-            info <- Option(symbol.info)
-            if !isTupleApply(symbol)
+            info <- Option(exactSymbol.info)
+            if !isTupleApply(exactSymbol)
           } yield {
             val (refQual, argss) = info.paramss match {
               case _ :: tail =>
@@ -207,7 +224,7 @@ class SignatureHelpProvider(val compiler: MetalsGlobal) {
                 loop(qual, Nil, args :: Nil)
                 (qual, args :: Nil)
             }
-            MethodCall(tree, refQual, symbol, tparams, argss)
+            MethodCall(tree, refQual, exactSymbol, tparams, argss)
           }
         case _ => None
       }
@@ -426,9 +443,9 @@ class SignatureHelpProvider(val compiler: MetalsGlobal) {
     val infos = t.alternatives.zipWithIndex.collect {
       case (method, i) if !method.isErroneous =>
         val isActiveSignature = method == activeParent
-        val tpe =
-          if (isActiveSignature) t.call.qualTpe
-          else method.info
+        val tpe = method.info
+        // if (t.call.qual) t.call.qualTpe
+        // else method.info
         val paramss: List[List[Symbol]] =
           if (!isActiveSignature) {
             mparamss(tpe)

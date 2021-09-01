@@ -982,5 +982,34 @@ class SignatureHelpSuite extends BaseSignatureHelpSuite {
            |""".stripMargin
     )
   )
+  check(
+    "conflicting",
+    """
+      |object x {
+      |  def foo(i: Int, s: String): Unit = ???
+      |  def foo(i: Boolean, s: Int, x: Double): Unit = ???
+      |
+      |  foo(false, @@) // <- active is : `foo(i: Int, s: String): Unit`
+      |                 //    should be ``
+      |}
+      |""".stripMargin,
+    """|foo(i: Boolean, s: Int, x: Double): Unit
+       |                ^^^^^^
+       |foo(i: Int, s: String): Unit
+       |""".stripMargin,
+    compat = Map(
+      "3.0" ->
+        """|+(x: Double): Double
+           |+(x: Float): Float
+           |+(x: Long): Long
+           |+(x: Int): Int
+           |  ^^^^^^
+           |+(x: Char): Int
+           |+(x: Short): Int
+           |+(x: Byte): Int
+           |+(x: String): String
+           |""".stripMargin
+    )
+  )
 
 }
