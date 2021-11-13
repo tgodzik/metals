@@ -200,6 +200,7 @@ case class ScalaPresentationCompiler(
         .inferredTypeEdits()
         .asJava
     }
+
   override def convertToNamedArguments(
       params: OffsetParams,
       argIndices: ju.List[Integer],
@@ -212,6 +213,17 @@ case class ScalaPresentationCompiler(
         argIndices.asScala.map(_.toInt).toSet,
       ).convertToNamedArguments.asJava
     }
+
+  override def insertInferredMethod(
+      params: OffsetParams
+  ): CompletableFuture[ju.List[l.TextEdit]] = ???
+  // val empty: ju.List[TextEdit] = new ju.ArrayList[TextEdit]()
+  // compilerAccess.withInterruptableCompiler(empty, params.token) { pc =>
+  //   new InferredTypeProvider(params, pc.compiler(), config)
+  //     .inferredTypeEdits()
+  //     .asJava
+  // }
+
   override def selectionRange(
       params: ju.List[OffsetParams]
   ): CompletableFuture[ju.List[l.SelectionRange]] =

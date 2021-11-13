@@ -95,6 +95,12 @@ public abstract class PresentationCompiler {
      */
     public abstract CompletableFuture<List<TextEdit>> insertInferredType(OffsetParams params);
 
+
+    /**
+     * Return the missing method
+     */
+    public abstract CompletableFuture<List<TextEdit>> insertInferredMethod(OffsetParams params);
+
     /**
      * Return named arguments for the apply method that encloses the given position.
      */

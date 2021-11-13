@@ -2053,6 +2053,19 @@ class MetalsLanguageServer(
           } yield ().asInstanceOf[Object]
         }
 
+      case ServerCommands.InsertInferredMethod(textDocumentParams) =>
+        CancelTokens.future { token =>
+          val uri = textDocumentParams.getTextDocument().getUri()
+          for {
+            edits <- compilers.insertInferredMethod(textDocumentParams, token)
+            if (!edits.isEmpty())
+            workspaceEdit = new l.WorkspaceEdit(Map(uri -> edits).asJava)
+            _ <- languageClient
+              .applyEdit(new ApplyWorkspaceEditParams(workspaceEdit))
+              .asScala
+          } yield ().asInstanceOf[Object]
+        }
+
       case ServerCommands.ConvertToNamedArguments(
             ServerCommands.ConvertToNamedArgsRequest(position, argIndices)
           ) =>

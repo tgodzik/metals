@@ -492,6 +492,24 @@ object ServerCommands {
          |""".stripMargin,
     )
 
+  val InsertInferredMethod =
+    new ParametrizedCommand[TextDocumentPositionParams](
+      "insert-inferred-method",
+      "Insert inferred method",
+      """|
+         |""".stripMargin,
+      """|Object with `document` and `position`
+         |
+         |Example:
+         |```json
+         |{
+         |  document: "file:///home/dev/foo/Bar.scala",
+         |  position: {line: 5, character: 12}
+         |}
+         |```
+         |""".stripMargin,
+    )
+
   val GotoLog = new Command(
     "goto-log",
     "Check logs",
@@ -582,6 +600,7 @@ object ServerCommands {
       GotoSymbol,
       ImportBuild,
       InsertInferredType,
+      InsertInferredMethod,
       NewScalaFile,
       NewJavaFile,
       NewScalaProject,

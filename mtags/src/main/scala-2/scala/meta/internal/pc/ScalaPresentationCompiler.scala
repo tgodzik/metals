@@ -156,6 +156,17 @@ case class ScalaPresentationCompiler(
     }
   }
 
+  override def insertInferredMethod(
+      params: OffsetParams
+  ): CompletableFuture[ju.List[TextEdit]] = {
+    val empty: ju.List[TextEdit] = new ju.ArrayList[TextEdit]()
+    compilerAccess.withInterruptableCompiler(empty, params.token) { pc =>
+      new InferredMethodProvider(pc.compiler(), params)
+        .inferredMethodEdits()
+        .asJava
+    }
+  }
+
   override def autoImports(
       name: String,
       params: OffsetParams
