@@ -101,6 +101,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.{Either => JEither}
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import org.eclipse.{lsp4j => l}
+import scala.meta.internal.metals.javasupport.JavaSemanticdbPrinter
 
 class MetalsLanguageServer(
     ec: ExecutionContextExecutorService,
@@ -246,6 +247,7 @@ class MetalsLanguageServer(
   private var supermethods: Supermethods = _
   private var codeActionProvider: CodeActionProvider = _
   private var definitionProvider: DefinitionProvider = _
+  private var javaHoverProvider: JavaSemanticdbPrinter = _
   private var semanticDBIndexer: SemanticdbIndexer = _
   private var implementationProvider: ImplementationProvider = _
   private var renameProvider: RenameProvider = _
@@ -507,6 +509,8 @@ class MetalsLanguageServer(
           buildTargets,
           scalaVersionSelector
         )
+        javaHoverProvider =
+          new JavaSemanticdbPrinter(semanticdbs, definitionProvider)
         formattingProvider = new FormattingProvider(
           workspace,
           buffers,
@@ -1404,20 +1408,26 @@ class MetalsLanguageServer(
   @JsonRequest("textDocument/hover")
   def hover(params: HoverExtParams): CompletableFuture[Hover] = {
     CancelTokens.future { token =>
-      compilers
-        .hover(params, token)
-        .map { hover =>
-          syntheticsDecorator.addSyntheticsHover(params, hover)
-        }
-        .map(
-          _.orElse {
-            val path = params.textDocument.getUri.toAbsolutePath
-            if (path.isWorksheet)
-              worksheetProvider.hover(path, params.getPosition)
-            else
-              None
-          }.orNull
-        )
+      val path = params.textDocument.getUri.toAbsolutePath
+      if (path.isJava) {
+
+        javaHoverProvider.hover(params, token)
+      } else {
+        compilers
+          .hover(params, token)
+          .map { hover =>
+            syntheticsDecorator.addSyntheticsHover(params, hover)
+          }
+          .map(
+            _.orElse {
+
+              if (path.isWorksheet)
+                worksheetProvider.hover(path, params.getPosition)
+              else
+                None
+            }.orNull
+          )
+      }
     }
   }
 
