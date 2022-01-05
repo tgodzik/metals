@@ -13,7 +13,7 @@ import org.eclipse.lsp4j.FoldingRangeKind;<<imports<<
  to
  wrap
  */<<comment<<
-public class Test {>>region>>
+public class Test >>region>>{
 
     abstract class A {
         abstract void hello();
