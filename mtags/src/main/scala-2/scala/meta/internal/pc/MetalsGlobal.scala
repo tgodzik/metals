@@ -589,8 +589,20 @@ class MetalsGlobal(
      */
     def namePos: Position = {
       val start = defn.pos.point
-      val end = start + defn.name.length() - 1
+      val end = start + defn.name.length()
       Position.range(defn.pos.source, start, start, end)
+    }
+
+  }
+  implicit class XtensionSelectTreeMetals(sel: Select) {
+
+    /**
+     * Returns the position of the name/identifier of this definition.
+     */
+    def namePos: Position = {
+      val start = sel.pos.point
+      val end = start + sel.name.stripSuffix("_$eq").length()
+      Position.range(sel.pos.source, start, start, end)
     }
 
   }

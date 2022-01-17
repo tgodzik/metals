@@ -36,6 +36,7 @@ import org.eclipse.lsp4j.Hover
 import org.eclipse.lsp4j.SelectionRange
 import org.eclipse.lsp4j.SignatureHelp
 import org.eclipse.lsp4j.TextEdit
+import org.eclipse.lsp4j.DocumentHighlight
 
 case class ScalaPresentationCompiler(
     buildTargetIdentifier: String = "",
@@ -229,6 +230,18 @@ case class ScalaPresentationCompiler(
       }
     }
   }
+
+  override def documentHighlight(
+      params: OffsetParams
+  ): CompletableFuture[util.List[DocumentHighlight]] =
+    CompletableFuture.completedFuture {
+      compilerAccess.withSharedCompiler(List.empty[DocumentHighlight].asJava) {
+        pc =>
+          new DocumentHighlightProvider(pc.compiler(), params)
+            .documentHighlight()
+            .asJava
+      }
+    }
 
   def newCompiler(): MetalsGlobal = {
     val classpath = this.classpath.mkString(File.pathSeparator)

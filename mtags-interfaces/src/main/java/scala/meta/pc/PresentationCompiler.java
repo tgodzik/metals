@@ -3,6 +3,7 @@ package scala.meta.pc;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
+import org.eclipse.lsp4j.DocumentHighlight;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.SignatureHelp;
 import org.eclipse.lsp4j.TextEdit;
@@ -114,6 +115,11 @@ public abstract class PresentationCompiler {
      * Return the selections ranges for the given positions. 
      */
     public abstract CompletableFuture<List<SelectionRange>> selectionRange(List<OffsetParams> params);
+
+    /**
+     * Return the document highlight for a given symbol at point.
+     */
+    public abstract CompletableFuture<List<DocumentHighlight>> documentHighlight(OffsetParams params);
 
     // =================================
     // Configuration and lifecycle APIs.

@@ -83,6 +83,7 @@ import org.eclipse.lsp4j.SelectionRange
 import org.eclipse.lsp4j.SignatureHelp
 import org.eclipse.lsp4j.SignatureInformation
 import org.eclipse.lsp4j.TextEdit
+import org.eclipse.lsp4j.DocumentHighlight
 
 case class ScalaPresentationCompiler(
     buildTargetIdentifier: String = "",
@@ -294,6 +295,17 @@ case class ScalaPresentationCompiler(
       }
     }
   end selectionRange
+
+  override def documentHighlight(
+      params: OffsetParams
+  ): CompletableFuture[ju.List[DocumentHighlight]] =
+    CompletableFuture.completedFuture {
+      compilerAccess.withSharedCompiler(List.empty[DocumentHighlight].asJava) {
+        pc =>
+          List.empty[DocumentHighlight].asJava
+      }
+    }
+  end documentHighlight
 
   def expandRangeToEnclosingApply(
       path: List[Tree],

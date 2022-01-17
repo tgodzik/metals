@@ -76,10 +76,7 @@ final class InferredTypeProvider(
        *     turns into
        * `.map((a: Int) => a + a)`
        */
-      case vl @ ValDef(_, name, tpt, _) if vl.symbol.isParameter =>
-        val nameEnd = vl.pos.start + name.length()
-        val namePos = tpt.pos.withEnd(nameEnd).withStart(nameEnd).toLSP
-
+      case vl @ ValDef(_, _, tpt, _) if vl.symbol.isParameter =>
         def leftParenStart = vl.pos.withEnd(vl.pos.start).toLSP
         def leftParenEdit = new TextEdit(leftParenStart, "(")
 
@@ -106,7 +103,10 @@ final class InferredTypeProvider(
 
         val typeNameEdit = {
           val rightParen = if (needsParens) ")" else ""
-          new TextEdit(namePos, ": " + prettyType(tpt.tpe) + rightParen)
+          new TextEdit(
+            vl.namePos.toLSP,
+            ": " + prettyType(tpt.tpe) + rightParen
+          )
         }
 
         if (needsParens) {
