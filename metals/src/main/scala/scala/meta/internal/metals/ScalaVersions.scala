@@ -48,6 +48,11 @@ object ScalaVersions {
       )
   }
 
+  def isSameMinorVersion(scalaVersion1: String, scalaVersion2: String) = {
+    scalaVersion1.split('.').take(2).mkString(".") ==
+      scalaVersion2.split('.').take(2).mkString(".")
+  }
+
   def recommendedVersion(scalaVersion: String): String = {
     latestBinaryVersionFor(scalaVersion).getOrElse {
       if (isScala3Version(scalaVersion)) {

@@ -74,8 +74,22 @@ object MtagsResolver {
             }
           }
         )
+        val fallbackVersion =
+          ScalaVersions.latestBinaryVersionFor(scalaVersion)
         computed match {
           case State.Success(v) => Some(v)
+          case _: State.Failure
+              if ScalaVersions.isScala3Version(scalaVersion) =>
+            fallbackVersion match {
+              case Some(fallback)
+                  // Scala 3 has much better quarantess of compatibility within minor versions
+                  if ScalaVersions.isSameMinorVersion(scalaVersion, fallback)
+                    && scalaVersion != fallback =>
+                scribe.info(s"Falling back to mtags for ${scalaVersion}.")
+                resolve(fallback)
+              case _ =>
+                None
+            }
           case _: State.Failure => None
         }
       }
