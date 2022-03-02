@@ -4,10 +4,6 @@ import tests.BaseSignatureHelpSuite
 
 class SignatureHelpPatternSuite extends BaseSignatureHelpSuite {
 
-  // @tgodzik docs not yet supported for Scala 3
-  override def ignoreScalaVersion: Option[IgnoreScalaVersion] =
-    Some(IgnoreScala3)
-
   check(
     "case",
     """
@@ -17,19 +13,21 @@ class SignatureHelpPatternSuite extends BaseSignatureHelpSuite {
       |  }
       |}
       |""".stripMargin,
-    """|map[B, That](f: ((Int, Int)) => B)(implicit bf: CanBuildFrom[List[(Int, Int)],B,That]): That
-       |             ^^^^^^^^^^^^^^^^^^^^
+    """|map[B](f: ((Int, Int)) => B): List[B]
+       |       ^^^^^^^^^^^^^^^^^^^^
        |""".stripMargin,
     compat = Map(
-      "2.13" ->
-        """|map[B](f: ((Int, Int)) => B): List[B]
-           |       ^^^^^^^^^^^^^^^^^^^^
-           |""".stripMargin
+      "2.12" -> """|map[B, That](f: ((Int, Int)) => B)(implicit bf: CanBuildFrom[List[(Int, Int)],B,That]): That
+                   |             ^^^^^^^^^^^^^^^^^^^^
+                   |""".stripMargin,
+      "3" -> """|map[B](f: A => B): List[B]
+                |       ^^^^^^^^^
+                |""".stripMargin
     )
   )
 
   check(
-    "generic1",
+    "generic1".only,
     """
       |object Main {
       |  Option(1) match {
@@ -48,7 +46,7 @@ class SignatureHelpPatternSuite extends BaseSignatureHelpSuite {
       |case class Two[T](a: T, b: T)
       |object Main {
       |  (null: Any) match {
-      |    case Two(@@) =>
+      |    case Two("", @@) =>
       |  }
       |}
       |""".stripMargin,
@@ -279,4 +277,23 @@ class SignatureHelpPatternSuite extends BaseSignatureHelpSuite {
        | """.stripMargin
   )
 
+  check(
+    "using-params".tag(IgnoreScala2),
+    """
+      |class HKT[C[_], T](a: C[T])
+      |object HKT {
+      |  def unapply(using String)(using Boolean)(a: Int): Option[(Int, Int)] = Some(2 -> 2)
+      |}
+      |object Main {
+      |  given b: Boolean = true
+      |  given str: String = ""
+      |  (null: Any) match {
+      |    case HKT(1, @@) =>
+      |  }
+      |}
+      |""".stripMargin,
+    """|unapply(implicit x$1: String)(implicit x$2: Boolean)(a: Int): Option[(Int, Int)]
+       |                                                     ^^^^^^
+       |""".stripMargin
+  )
 }
