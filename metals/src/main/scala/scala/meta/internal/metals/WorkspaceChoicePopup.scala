@@ -37,7 +37,9 @@ class WorkspaceChoicePopup(
       languageClient
         .showMessageRequest(choicesParams())
         .asScala
-        .map { item => currentFolders.find(_.getVisibleName == item) }
+        .map { item =>
+          currentFolders.find(_.getVisibleName == item.getTitle())
+        }
     }
   }
 }

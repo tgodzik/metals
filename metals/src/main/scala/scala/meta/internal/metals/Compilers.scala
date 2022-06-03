@@ -15,10 +15,8 @@ import scala.util.control.NonFatal
 
 import scala.meta.inputs.Input
 import scala.meta.inputs.Position
-import scala.meta.internal.metals.CompilerOffsetParamsUtils
-import scala.meta.internal.metals.CompilerRangeParamsUtils
 import scala.meta.internal.metals.Compilers.PresentationCompilerKey
-import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.metals.MetalsEnrichments.given
 import scala.meta.internal.parsing.Trees
 import scala.meta.internal.pc.EmptySymbolSearch
 import scala.meta.internal.pc.JavaPresentationCompiler
@@ -826,7 +824,7 @@ class Compilers(
       jworksheetsCache.put(
         path,
         statusBar.trackBlockingTask(
-          s"${config.icons.sync}Loading worksheet presentation compiler"
+          s"${config.icons().sync}Loading worksheet presentation compiler"
         ) {
           val worksheetSearch = new StandaloneSymbolSearch(
             workspace,
@@ -905,7 +903,7 @@ class Compilers(
           PresentationCompilerKey.BuildTarget(scalaTarget.info.getId),
           { _ =>
             statusBar.trackBlockingTask(
-              s"${config.icons.sync}Loading presentation compiler"
+              s"${config.icons().sync}Loading presentation compiler"
             ) {
               newCompiler(scalaTarget, mtags, search)
             }

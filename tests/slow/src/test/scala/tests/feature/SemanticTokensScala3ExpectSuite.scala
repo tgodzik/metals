@@ -21,12 +21,12 @@ import tests.TestMtagsResolver
 import tests.TestSemanticTokens
 import tests.TestingClient
 
-class SemanticTokensScala3ExpectSuite(
-) extends DirectoryExpectSuite("semanticTokens3") {
-  override lazy val input: InputProperties = InputProperties.scala3()
+class SemanticTokensScala2ExpectSuite(
+) extends DirectoryExpectSuite("semanticTokens") {
+  override lazy val input: InputProperties = InputProperties.scala2()
   private val compiler = {
     val resolver = new TestMtagsResolver()
-    resolver.resolve(V.scala3) match {
+    resolver.resolve(V.scala213) match {
 
       case Some(mtags: MtagsBinaries.Artifacts) =>
         val time = new FakeTime
@@ -45,7 +45,7 @@ class SemanticTokensScala3ExpectSuite(
             input.classpath.entries.map(_.toNIO).asJava,
             Nil.asJava,
           )
-      case _ => fail(s"Could not load ${V.scala3} presentation compiler")
+      case _ => fail(s"Could not load ${V.scala213} presentation compiler")
     }
 
   }
@@ -65,7 +65,7 @@ class SemanticTokensScala3ExpectSuite(
           val tokens = SemanticTokensProvider.provide(
             nodes,
             params,
-            isScala3 = true,
+            isScala3 = false,
           )
 
           TestSemanticTokens.semanticString(

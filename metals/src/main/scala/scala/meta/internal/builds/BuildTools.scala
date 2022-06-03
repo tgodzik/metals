@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.meta.internal.io.PathIO
 import scala.meta.internal.metals.BloopServers
-import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.metals.MetalsEnrichments.given
 import scala.meta.internal.metals.UserConfiguration
 import scala.meta.io.AbsolutePath
 

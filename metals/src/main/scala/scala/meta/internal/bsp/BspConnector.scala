@@ -14,7 +14,7 @@ import scala.meta.internal.metals.BloopServers
 import scala.meta.internal.metals.BuildServerConnection
 import scala.meta.internal.metals.Messages
 import scala.meta.internal.metals.Messages.BspSwitch
-import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.metals.MetalsEnrichments.given
 import scala.meta.internal.metals.StatusBar
 import scala.meta.internal.metals.Tables
 import scala.meta.internal.metals.UserConfiguration
@@ -60,7 +60,7 @@ class BspConnector(
         bspServers
           .findAvailableServers()
           .find(_.getName == sel)
-          .map(ResolvedBspOne)
+          .map(ResolvedBspOne.apply)
     }
   }
 
@@ -127,7 +127,7 @@ class BspConnector(
               None,
             )
           for {
-            Some(item) <- client
+            case Some(item) <- client
               .showMessageRequest(query.params)
               .asScala
               .map(item =>

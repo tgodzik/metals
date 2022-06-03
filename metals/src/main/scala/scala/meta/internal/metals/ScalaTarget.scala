@@ -5,7 +5,7 @@ import java.nio.file.Path
 import scala.meta.Dialect
 import scala.meta.dialects._
 import scala.meta.internal.builds.MillBuildTool
-import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.metals.MetalsEnrichments.given
 import scala.meta.internal.semver.SemVer
 import scala.meta.io.AbsolutePath
 

@@ -78,7 +78,7 @@ class JavaToplevelSuite extends BaseSuite {
       name: TestOptions,
       code: String,
       expected: String,
-  )(implicit loc: Location) {
+  )(implicit loc: Location) = {
     test(name) {
       val input = Input.VirtualFile("Test.java", code)
       val obtained =

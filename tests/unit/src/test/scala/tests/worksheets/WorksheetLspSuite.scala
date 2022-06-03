@@ -4,8 +4,14 @@ import scala.meta.internal.metals.{BuildInfo => V}
 
 import munit.TestOptions
 
-class WorksheetLspSuite extends tests.BaseWorksheetLspSuite(V.scala213) {
+class WorksheetLspSuite extends tests.BaseWorksheetLspSuite(V.scala3) {
 
+  override def versionSpecificCodeToValidate: String =
+    """given str: String = """""
+
+  override def versionSpecificScalacOptionsToValidate: List[String] = List(
+    "-Ycheck-reentrant"
+  )
   checkWorksheetDeps(
     "imports-inside",
     "a/src/main/scala/foo/Main.worksheet.sc",
@@ -24,7 +30,7 @@ class WorksheetLspSuite extends tests.BaseWorksheetLspSuite(V.scala213) {
              |  "a": {}
              |}
              |/$path
-             |import $$dep.`com.lihaoyi::scalatags:0.9.0`
+             |import $$dep.`com.lihaoyi::scalatags:0.12.0`
              |import scalatags.Text.all._
              |val htmlFile = html(
              |  body(
@@ -43,11 +49,11 @@ class WorksheetLspSuite extends tests.BaseWorksheetLspSuite(V.scala213) {
         _ = assertNoDiff(
           server.workspaceDefinitions,
           s"""|/$path
-              |import $$dep/*<no symbol>*/.`com.lihaoyi::scalatags:0.9.0`/*<no symbol>*/
+              |import $$dep/*<no symbol>*/.`com.lihaoyi::scalatags:0.12.0`/*<no symbol>*/
               |import scalatags.Text/*Text.scala*/.all/*Text.scala*/._
-              |val htmlFile/*L2*/ = html/*Text.scala*/(
-              |  body/*Text.scala*/(
-              |    p/*Text.scala*/("This is a big paragraph of text")
+              |val htmlFile/*L2*/ = html/*Tags.scala*/(
+              |  body/*Tags.scala*/(
+              |    p/*Tags.scala*/("This is a big paragraph of text")
               |  )
               |)
               |htmlFile/*L2*/.render/*Text.scala*/
@@ -58,14 +64,14 @@ class WorksheetLspSuite extends tests.BaseWorksheetLspSuite(V.scala213) {
         _ = assertNoDiagnostics()
         _ = assertNoDiff(
           client.workspaceDecorations,
-          """|import $dep.`com.lihaoyi::scalatags:0.9.0`
+          """|import $dep.`com.lihaoyi::scalatags:0.12.0`
              |import scalatags.Text.all._
              |val htmlFile = html(
              |  body(
              |    p("This is a big paragraph of text")
              |  )
-             |) // : scalatags.Text.TypedTag[String] = TypedTag(tag = "html",modifiers = List(ArraySeq(TypedTag(tag = "body",modifiers = L…
-             |htmlFile.render // : String = "<html><body><p>This is a big paragraph of text</p></body></html>"
+             |) // : TypedTag[String] = <html><body><p>This is a big paragraph of text</p></body></html>
+             |htmlFile.render // : String = <html><body><p>This is a big paragraph of text</p></body></html>
              |""".stripMargin,
         )
       } yield ()
@@ -89,7 +95,7 @@ class WorksheetLspSuite extends tests.BaseWorksheetLspSuite(V.scala213) {
       _ <- server.didOpen(path)
       _ = assertNoDiff(
         client.workspaceErrorShowMessages,
-        "Error downloading com.lihaoyi:scalatags_2.13:0.999.0",
+        "Error downloading com.lihaoyi:scalatags_3:0.999.0",
       )
     } yield ()
   }
@@ -113,60 +119,7 @@ class WorksheetLspSuite extends tests.BaseWorksheetLspSuite(V.scala213) {
       _ <- server.didOpen(path)
       _ = assertNoDiff(
         client.workspaceDecorations,
-        "new java.sql.Date(100L) // : java.sql.Date = 1970-01-01",
-      )
-    } yield ()
-  }
-
-  test("akka") {
-    cleanWorkspace()
-    val path = "hi.worksheet.sc"
-    for {
-      _ <- initialize(
-        s"""
-           |/metals.json
-           |{
-           |  "a": {}
-           |}
-           |/${path}
-           |import $$dep.`com.typesafe.akka::akka-stream:2.6.13`
-           |
-           |import akka.actor.ActorSystem
-           |import akka.NotUsed
-           |import akka.stream.scaladsl.Source
-           |import akka.stream.scaladsl.Sink
-           |import java.io.File
-           |import scala.concurrent.Await
-           |import scala.concurrent.duration.DurationInt
-           |
-           |
-           |implicit val system: ActorSystem = ActorSystem("QuickStart")
-           |val source: Source[Int, NotUsed] = Source(1 to 2)
-           |val future = source.runWith(Sink.foreach(_ => ()))
-           |Await.result(future, 3.seconds)
-           |
-           |""".stripMargin
-      )
-      _ <- server.didOpen(path)
-      _ = assertNoDiff(
-        // it seems that part of the string is always different, so let's remove it
-        client.workspaceDecorations.replaceAll(".out\\(.*", ".out(..."),
-        """|import $dep.`com.typesafe.akka::akka-stream:2.6.13`
-           |
-           |import akka.actor.ActorSystem
-           |import akka.NotUsed
-           |import akka.stream.scaladsl.Source
-           |import akka.stream.scaladsl.Sink
-           |import java.io.File
-           |import scala.concurrent.Await
-           |import scala.concurrent.duration.DurationInt
-           |
-           |
-           |implicit val system: ActorSystem = ActorSystem("QuickStart") // : ActorSystem = akka://QuickStart
-           |val source: Source[Int, NotUsed] = Source(1 to 2) // : Source[Int, NotUsed] = Source(SourceShape(StatefulMapConcat.out(...
-           |val future = source.runWith(Sink.foreach(_ => ())) // : concurrent.Future[akka.Done] = Future(Success(Done))
-           |Await.result(future, 3.seconds) // : akka.Done = Done
-           |""".stripMargin,
+        "new java.sql.Date(100L) // : Date = 1970-01-01",
       )
     } yield ()
   }

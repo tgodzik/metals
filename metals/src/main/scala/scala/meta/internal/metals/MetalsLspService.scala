@@ -39,10 +39,8 @@ import scala.meta.internal.decorations.SyntheticsDecorationProvider
 import scala.meta.internal.implementation.ImplementationProvider
 import scala.meta.internal.implementation.Supermethods
 import scala.meta.internal.io.FileIO
-import scala.meta.internal.metals.BuildInfo
 import scala.meta.internal.metals.Messages.IncompatibleBloopVersion
 import scala.meta.internal.metals.MetalsEnrichments._
-import scala.meta.internal.metals.StdReportContext
 import scala.meta.internal.metals.ammonite.Ammonite
 import scala.meta.internal.metals.callHierarchy.CallHierarchyProvider
 import scala.meta.internal.metals.clients.language.ConfiguredLanguageClient
@@ -233,7 +231,7 @@ class MetalsLspService(
     buildTargetClasses,
     () => folder,
     languageClient,
-    () => testProvider.refreshTestSuites(),
+    () => testProvider.refreshTestSuites(()),
     () => {
       if (clientConfig.isDoctorVisibilityProvider())
         headDoctor.executeRefreshDoctor()
@@ -323,7 +321,7 @@ class MetalsLspService(
     folder,
     buildTargets,
     statusBar,
-    clientConfig.icons,
+    clientConfig.icons(),
     buildTools,
     compilations.isCurrentlyCompiling,
   )
@@ -460,7 +458,7 @@ class MetalsLspService(
     folder,
     buffers,
     definitionProvider,
-    clientConfig.icons,
+    clientConfig.icons(),
     clientConfig.commandInHtmlFormat(),
   )
 
@@ -569,7 +567,7 @@ class MetalsLspService(
     languageClient,
     clientConfig,
     statusBar,
-    clientConfig.icons,
+    clientConfig.icons(),
     tables,
     buildTargets,
   )
@@ -587,7 +585,7 @@ class MetalsLspService(
       semanticdbs,
       definitionProvider,
       referencesProvider,
-      clientConfig.icons,
+      clientConfig.icons(),
       () => compilers,
       trees,
       buildTargets,
@@ -625,7 +623,7 @@ class MetalsLspService(
 
   val worksheetProvider: WorksheetProvider = {
     val worksheetPublisher =
-      if (clientConfig.isDecorationProvider)
+      if (clientConfig.isDecorationProvider())
         new DecorationWorksheetPublisher(
           clientConfig.isInlineDecorationProvider()
         )
@@ -871,9 +869,11 @@ class MetalsLspService(
             new Registration(
               "1",
               "workspace/didChangeWatchedFiles",
-              clientConfig.globSyntax.registrationOptions(
-                this.folder
-              ),
+              clientConfig
+                .globSyntax()
+                .registrationOptions(
+                  this.folder
+                ),
             )
           ).asJava
         )
@@ -950,7 +950,7 @@ class MetalsLspService(
               session.version,
               userConfig().bloopVersion.nonEmpty,
               old.bloopVersion.isDefined,
-              () => autoConnectToBuildServer,
+              () => autoConnectToBuildServer(),
             )
             .flatMap { _ =>
               bloopServers.ensureDesiredJvmSettings(
@@ -1444,7 +1444,7 @@ class MetalsLspService(
               s"Found new symbol references for $names, try running again."
             scribe.info(message)
             statusBar
-              .addMessage(clientConfig.icons.info + message)
+              .addMessage(clientConfig.icons().info + message)
           }
       }
     }
@@ -1511,7 +1511,7 @@ class MetalsLspService(
       item: CompletionItem
   ): CompletableFuture[CompletionItem] =
     CancelTokens.future { _ =>
-      if (clientConfig.isCompletionItemResolve) {
+      if (clientConfig.isCompletionItemResolve()) {
         compilers.completionItemResolve(item)
       } else {
         Future.successful(item)
@@ -1551,9 +1551,9 @@ class MetalsLspService(
     CancelTokens.future { _ =>
       val path = params.getTextDocument().getUri().toAbsolutePath
       if (path.isScala)
-        parseTrees.currentFuture.map(_ =>
-          foldingRangeProvider.getRangedForScala(path)
-        )
+        parseTrees
+          .currentFuture()
+          .map(_ => foldingRangeProvider.getRangedForScala(path))
       else
         Future {
           foldingRangeProvider.getRangedForJava(path)
@@ -1603,7 +1603,7 @@ class MetalsLspService(
           Future.successful(bloopServers.shutdownServer())
         case Some(session) if session.main.isSbt =>
           for {
-            currentBuildTool <- supportedBuildTool
+            currentBuildTool <- supportedBuildTool()
             res <- currentBuildTool match {
               case Some(sbt: SbtBuildTool) =>
                 for {
@@ -1911,7 +1911,7 @@ class MetalsLspService(
       }
     }
 
-    buildTools.loadSupported match {
+    buildTools.loadSupported() match {
       case Nil => {
         if (!buildTools.isAutoConnectable) {
           warnings.noBuildTool()
@@ -1922,7 +1922,7 @@ class MetalsLspService(
       }
       case buildTools =>
         for {
-          Some(buildTool) <- buildToolSelector.checkForChosenBuildTool(
+          case Some(buildTool) <- buildToolSelector.checkForChosenBuildTool(
             buildTools
           )
         } yield isCompatibleVersion(buildTool)
@@ -1933,7 +1933,7 @@ class MetalsLspService(
       forceImport: Boolean
   ): Future[BuildChange] =
     for {
-      possibleBuildTool <- supportedBuildTool
+      possibleBuildTool <- supportedBuildTool()
       chosenBuildServer = tables.buildServers.selectedServer()
       isBloopOrEmpty = chosenBuildServer.isEmpty || chosenBuildServer.exists(
         _ == BloopServers.name
@@ -1976,7 +1976,7 @@ class MetalsLspService(
   def maybeSetupScalaCli(): Future[Unit] = {
     if (
       !buildTools.isAutoConnectable
-      && buildTools.loadSupported.isEmpty
+      && buildTools.loadSupported().isEmpty
       && folder.hasScalaFiles
     ) {
       scalaCli.setupIDE(folder)
@@ -2259,7 +2259,7 @@ class MetalsLspService(
       if (!notification.isDismissed) {
         val messageParams = IncompatibleBloopVersion.params(
           bspServerVersion,
-          BuildInfo.bloopVersion,
+          scala.meta.internal.metals.BuildInfo.bloopVersion,
           isChangedInSettings = userConfig().bloopVersion != None,
         )
         languageClient.showMessageRequest(messageParams).asScala.foreach {
@@ -2279,7 +2279,7 @@ class MetalsLspService(
   ): Future[Unit] = {
     paths
       .find { path =>
-        if (clientConfig.isDidFocusProvider || focusedDocument().isDefined) {
+        if (clientConfig.isDidFocusProvider() || focusedDocument().isDefined) {
           focusedDocument().contains(path) &&
           path.isWorksheet
         } else {
