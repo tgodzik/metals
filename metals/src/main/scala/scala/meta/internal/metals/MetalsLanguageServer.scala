@@ -870,6 +870,9 @@ class MetalsLanguageServer(
         )
         capabilities.setFoldingRangeProvider(true)
         capabilities.setSelectionRangeProvider(true)
+        capabilities.setSemanticTokensProvider(
+          SemanticTokenCapability.defaultServerCapability
+        )
         capabilities.setCodeLensProvider(new CodeLensOptions(false))
         capabilities.setDefinitionProvider(true)
         capabilities.setImplementationProvider(true)
@@ -1671,6 +1674,24 @@ class MetalsLanguageServer(
     }
     results
   }
+
+  /** Requesting semantic tokens for a whole file in order to highlight */
+  @JsonRequest("textDocument/semanticTokens/full")
+  def semanticTokensFull(
+      params: SemanticTokensParams
+  ): CompletableFuture[SemanticTokens] = {
+    scribe.info("Debug: MetalsLanguageServer.semanticHighlighting: Start")
+
+    CancelTokens.future { token =>
+      compilers.semanticTokens(
+        params,
+        SemanticTokenCapability.TokenTypes,
+        SemanticTokenCapability.TokenModifiers,
+        token
+      )
+    }
+  }
+
 
   @JsonRequest("textDocument/prepareCallHierarchy")
   def prepareCallHierarchy(
