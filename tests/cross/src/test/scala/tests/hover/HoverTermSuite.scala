@@ -506,4 +506,36 @@ class HoverTermSuite extends BaseHoverSuite {
     "val second: Boolean".hover,
     automaticPackage = false,
   )
+
+  check(
+    "tuple".tag(IgnoreScala2),
+    """|
+       |def hello = 
+       |    
+       |  List(1,2,3).zipWithIndex.map { (x, y) =>
+       |      println(<<@@x>>)
+       |    }
+       |""".stripMargin,
+    "def x: Int".hover,
+    automaticPackage = false,
+    compat = Map(
+      "3.2" -> "val x: Int".hover
+    ),
+  )
+
+  check(
+    "tuple2".tag(IgnoreScala2),
+    """|
+       |def hello = 
+       |    
+       |  List(1,2,3).zipWithIndex.map { (<<x@@>>, y) =>
+       |      println(x)
+       |    }
+       |""".stripMargin,
+    "def x: Int".hover,
+    automaticPackage = false,
+    compat = Map(
+      "3.2" -> "val x: Int".hover
+    ),
+  )
 }

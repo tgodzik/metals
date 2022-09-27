@@ -121,6 +121,7 @@ object MetalsInteractive:
       sourcePos: SourcePosition,
       source: SourceFile,
   )(using Context): Boolean =
+
     def contains(tree: Tree): Boolean = tree match
       case select: Select =>
         // using `nameSpan` as SourceTree for Select (especially symbolic-infix e.g. `::` of `1 :: Nil`) miscalculate positions
@@ -248,8 +249,20 @@ object MetalsInteractive:
             target.sourcePos.contains(pos) =>
         List((target.symbol, target.typeOpt))
 
+      case (ident: Ident) :: _ =>
+        List((ident.symbol, ident.symbol.info))
+
+      case (vd: ValDef) :: _
+          if vd.symbol.is(Synthetic) &&
+            MetalsInteractive.isOnName(
+              path,
+              pos,
+              indexed.ctx.source,
+            ) =>
+        List((vd.symbol, vd.symbol.info))
+
       case path @ head :: tail =>
-        if head.symbol.is(Synthetic) then
+        if head.symbol.is(Synthetic) && !head.isInstanceOf[Ident] then
           enclosingSymbolsWithExpressionType(
             tail,
             pos,
