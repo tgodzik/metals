@@ -43,10 +43,7 @@ public abstract class PresentationCompiler {
      * Returns token informations from presentation compiler.
      *
      */
-    public abstract CompletableFuture<List<Integer>> semanticTokens(
-            VirtualFileParams params, 
-            List<String> capableTypes, 
-            List<String> capableModifiers);
+    public abstract CompletableFuture<List<Integer>> semanticTokens(VirtualFileParams params);
 
     /**
      * Returns code completions for the given source position.
