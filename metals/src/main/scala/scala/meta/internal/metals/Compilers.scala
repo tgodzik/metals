@@ -374,14 +374,9 @@ class Compilers(
 
   def semanticTokens(
       params: SemanticTokensParams,
-      capableTypes: List[String],
-      capableModifiers: List[String],
       token: CancelToken,
   ): Future[SemanticTokens] = {
-    scribe.info("Debug: Compiliers.semanticTokens:Start")
 
-    // Probably extra prcess is needed to construct vFile for Scala 3.
-    // See didchange.
     val path = params.getTextDocument.getUri.toAbsolutePath
 
     if (path.isScalaScript || path.isSbt) {
@@ -393,7 +388,7 @@ class Compilers(
 
       loadCompiler(path)
         .map { pc =>
-          pc.semanticTokens(vFile, capableTypes.asJava, capableModifiers.asJava)
+          pc.semanticTokens(vFile)
             .asScala
             .map { plist =>
               new SemanticTokens(plist)

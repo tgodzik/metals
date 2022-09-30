@@ -120,9 +120,7 @@ case class ScalaPresentationCompiler(
   def didClose(uri: URI): Unit = {}
 
   override def semanticTokens(
-      params: VirtualFileParams,
-      capableTypes: util.List[String],
-      capableModifiers: util.List[String]
+      params: VirtualFileParams
   ): CompletableFuture[ju.List[Integer]] = {
 
     val empty: ju.List[Integer] = new ju.ArrayList[Integer]()
@@ -132,9 +130,7 @@ case class ScalaPresentationCompiler(
     ) { pc =>
       new SemanticTokenProvider(
         pc.compiler(),
-        params,
-        capableTypes,
-        capableModifiers
+        params
       ).provide()
     }
   }
