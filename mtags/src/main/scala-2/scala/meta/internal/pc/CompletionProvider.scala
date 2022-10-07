@@ -444,18 +444,31 @@ class CompletionProvider(
       val kind = completions match {
         case _: CompletionResult.ScopeMembers =>
           CompletionListKind.Scope
-        case _: CompletionResult.TypeMembers =>
+        case t: CompletionResult.TypeMembers =>
+          t.qualifier match {
+            case Ident(name) =>
+              val typeMembers = metalsScopeMembers(t.qualifier.pos)
+              pprint.log(typeMembers)
+              pprint.log(typeMembers.find(_.sym.name == t.name))
+
+            case _ =>
+
+          }
+
           CompletionListKind.Type
         case _ =>
           CompletionListKind.None
       }
       val isTypeMember = kind == CompletionListKind.Type
       params.checkCanceled()
+      pprint.log(completions)
       val matchingResults = completions.matchingResults { entered => name =>
+        pprint.log(entered)
         if (isTypeMember) CompletionFuzzy.matchesSubCharacters(entered, name)
         else CompletionFuzzy.matches(entered, name)
       }
 
+      pprint.log(matchingResults)
       val latestParentTrees = getLastVisitedParentTrees(pos)
       val completion = completionPosition(
         pos,

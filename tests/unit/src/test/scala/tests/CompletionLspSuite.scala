@@ -213,6 +213,42 @@ class CompletionLspSuite extends BaseCompletionLspSuite("completion") {
     } yield ()
   }
 
+  test("package-alias") {
+    cleanWorkspace()
+    for {
+      _ <- initialize(
+        """/metals.json
+          |{
+          |  "a": {}
+          |}
+          |/a/src/main/scala/a/package.scala
+          |package object a {
+          |  type FancyInt = Int
+          |}
+          |/a/src/main/scala/a/A.scala
+          |package a
+          |object A extends App {
+          |  def foo(n: FancyInt, k: Int): Unit = {
+          |    // @@
+          |    k
+          |  }
+          |}
+          |
+          |""".stripMargin
+      )
+      _ <- assertCompletion(
+        "n.@@",
+        """|max(that: Double): Double
+           |max(that: Float): Float
+           |max(that: Int): Int
+           |max(that: Long): Long
+           |""".stripMargin,
+        includeDetail = false,
+        filter = str => str.contains("max"),
+      )
+    } yield ()
+  }
+
   test("rambo".flaky) {
     cleanWorkspace()
     for {
