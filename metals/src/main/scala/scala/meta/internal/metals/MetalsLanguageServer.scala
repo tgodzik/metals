@@ -104,6 +104,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.{Either => JEither}
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import org.eclipse.{lsp4j => l}
+import scala.meta.internal.decorations.InlayHintProvider
 
 class MetalsLanguageServer(
     ec: ExecutionContextExecutorService,
@@ -274,6 +275,7 @@ class MetalsLanguageServer(
   private var formattingProvider: FormattingProvider = _
   private var javaFormattingProvider: JavaFormattingProvider = _
   private var syntheticsDecorator: SyntheticsDecorationProvider = _
+  private var inlayHintsProvider: InlayHintProvider = _
   private var initializeParams: Option[InitializeParams] = None
   private var referencesProvider: ReferenceProvider = _
   private var callHierarchyProvider: CallHierarchyProvider = _
@@ -649,6 +651,18 @@ class MetalsLanguageServer(
           () => userConfig,
           trees,
         )
+        inlayHintsProvider = new InlayHintProvider(
+          workspace,
+          semanticdbs,
+          buffers,
+          languageClient,
+          fingerprints,
+          charset,
+          () => focusedDocument,
+          clientConfig,
+          () => userConfig,
+          trees,
+        )
         testProvider = new TestSuitesProvider(
           buildTargets,
           buildTargetClasses,
@@ -914,6 +928,9 @@ class MetalsLanguageServer(
         } else {
           capabilities.setCodeActionProvider(true)
         }
+
+        pprint.log(params.getCapabilities().getTextDocument().getInlayHint())
+        capabilities.setInlayHintProvider(true)
 
         val textDocumentSyncOptions = new TextDocumentSyncOptions
         textDocumentSyncOptions.setChange(TextDocumentSyncKind.Full)
@@ -1348,6 +1365,7 @@ class MetalsLanguageServer(
           ) {
             buildServerPromise.future.flatMap { _ =>
               syntheticsDecorator.refresh()
+              inlayHintsProvider.refresh()
             }
           } else {
             Future.successful(())
@@ -1534,6 +1552,15 @@ class MetalsLanguageServer(
               None
           }.orNull
         )
+    }
+  }
+
+  @JsonRequest("textDocument/inlayHint")
+  def inlayHints(
+      params: InlayHintParams
+  ): CompletableFuture[util.List[InlayHint]] = {
+    CancelTokens.future { token =>
+      inlayHintsProvider.inlayHints(params).map(_.asJava)
     }
   }
 

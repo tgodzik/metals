@@ -136,6 +136,14 @@ case class ClientConfiguration(initialConfig: MetalsServerConfig) {
   def isInlineDecorationProvider(): Boolean =
     initializationOptions.inlineDecorationProvider.getOrElse(false)
 
+  def isInlayHintsEnabled(): Boolean = {
+    for {
+      capabilities <- clientCapabilities
+      textDocumentCapabilities <- Option(capabilities.getTextDocument())
+      inlayHintsCapabilities <- Option(textDocumentCapabilities.getInlayHint())
+    } yield true
+  }.getOrElse(false)
+
   def isTreeViewProvider(): Boolean =
     extract(
       initializationOptions.treeViewProvider,

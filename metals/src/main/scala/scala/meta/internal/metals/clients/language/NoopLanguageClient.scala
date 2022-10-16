@@ -19,6 +19,10 @@ import org.eclipse.lsp4j.ShowMessageRequestParams
  */
 abstract class NoopLanguageClient extends MetalsLanguageClient {
   override def metalsStatus(params: MetalsStatusParams): Unit = ()
+
+  override def refreshInlayHints(): CompletableFuture[Void] =
+    super.refreshInlayHints()
+
   override def metalsSlowTask(
       params: MetalsSlowTaskParams
   ): CompletableFuture[MetalsSlowTaskResult] =
