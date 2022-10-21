@@ -8,13 +8,27 @@ import scala.util.Properties
 
 import scala.meta.internal.metals.UserConfiguration
 import scala.meta.io.AbsolutePath
-
+import coursierapi.Repository
+import coursierapi.MavenRepository
+import coursierapi.IvyRepository
+import scala.meta.internal.metals.MetalsEnrichments._
 case class GradleBuildTool(userConfig: () => UserConfiguration)
     extends BuildTool
     with BloopInstallProvider {
 
   private val initScriptName = "init-script.gradle"
-  private def initScript(versionToUse: String) =
+  private def initScript(versionToUse: String) = {
+    val repos = Repository.defaults.asScala.collect {
+      case mr: MavenRepository if mr != Repository.central =>
+        // filter central etc.
+        s"""|maven {
+            |        url "${mr.getBase()}"
+            |}""".stripMargin
+
+      case ir: IvyRepository =>
+        ir.getPattern()
+    }
+
     s"""
        |initscript {
        |  repositories{
@@ -28,6 +42,7 @@ case class GradleBuildTool(userConfig: () => UserConfiguration)
        |  apply plugin: bloop.integrations.gradle.BloopPlugin
        |}
     """.stripMargin.getBytes()
+  }
 
   private lazy val initScriptPath: Path = {
     val bloopVersion = userConfig().currentBloopVersion
