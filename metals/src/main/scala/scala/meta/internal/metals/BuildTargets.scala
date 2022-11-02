@@ -78,6 +78,11 @@ final class BuildTargets() {
   def mappedTo(path: AbsolutePath): Option[TargetData.MappedSource] =
     data.fromOptions(_.actualSources.get(path))
 
+  def mappedFrom(path: AbsolutePath): Option[AbsolutePath] =
+    data.fromOptions(_.actualSources.collectFirst {
+      case (source, mapped) if mapped.path == path => source
+    })
+
   def allBuildTargetIds: Seq[BuildTargetIdentifier] =
     allBuildTargetIdsInternal.map(_._2).toVector
 

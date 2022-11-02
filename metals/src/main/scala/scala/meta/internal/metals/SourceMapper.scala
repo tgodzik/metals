@@ -13,6 +13,8 @@ final case class SourceMapper(
     buffers: Buffers,
     workspace: () => AbsolutePath,
 ) {
+  def mappedFrom(path: AbsolutePath): Option[AbsolutePath] =
+    buildTargets.mappedFrom(path)
 
   def mappedTo(path: AbsolutePath): Option[AbsolutePath] =
     buildTargets.mappedTo(path).map(_.path)

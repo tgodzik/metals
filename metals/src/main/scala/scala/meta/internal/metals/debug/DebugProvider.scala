@@ -40,6 +40,7 @@ import scala.meta.internal.metals.MutableCancelable
 import scala.meta.internal.metals.ScalaTestSuites
 import scala.meta.internal.metals.ScalaTestSuitesDebugRequest
 import scala.meta.internal.metals.ScalaVersionSelector
+import scala.meta.internal.metals.SourceMapper
 import scala.meta.internal.metals.StacktraceAnalyzer
 import scala.meta.internal.metals.StatusBar
 import scala.meta.internal.metals.clients.language.MetalsLanguageClient
@@ -86,6 +87,7 @@ class DebugProvider(
     semanticdbs: Semanticdbs,
     compilers: Compilers,
     statusBar: StatusBar,
+    sourceMapper: SourceMapper,
 ) extends Cancelable {
 
   import DebugProvider._
@@ -187,6 +189,8 @@ class DebugProvider(
         workspace,
         clientConfig.disableColorOutput(),
         statusBar,
+        sourceMapper,
+        buildServer,
       )
     }
     val server = new DebugServer(sessionName, uri, proxyFactory)

@@ -1,6 +1,7 @@
 package scala.meta.internal.metals.debug
 
 import java.net.Socket
+import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -8,11 +9,13 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.Promise
 
+import scala.meta.internal.metals.BuildServerConnection
 import scala.meta.internal.metals.Cancelable
 import scala.meta.internal.metals.Compilers
 import scala.meta.internal.metals.EmptyCancelToken
 import scala.meta.internal.metals.JsonParser._
 import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.metals.SourceMapper
 import scala.meta.internal.metals.StacktraceAnalyzer
 import scala.meta.internal.metals.StatusBar
 import scala.meta.internal.metals.Trace
@@ -44,13 +47,16 @@ private[debug] final class DebugProxy(
     compilers: Compilers,
     stripColor: Boolean,
     statusBar: StatusBar,
+    sourceMapper: SourceMapper,
+    buildServer: BuildServerConnection,
 )(implicit ec: ExecutionContext) {
   private val exitStatus = Promise[ExitStatus]()
   @volatile private var outputTerminated = false
   @volatile private var debugMode: DebugMode = DebugMode.Enabled
   private val cancelled = new AtomicBoolean()
 
-  @volatile private var clientAdapter = ClientConfigurationAdapter.default
+  @volatile private var clientAdapter =
+    ClientConfigurationAdapter.default(sourceMapper)
   @volatile private var lastFrames: Array[StackFrame] = Array.empty
 
   lazy val listen: Future[ExitStatus] = {
@@ -82,7 +88,12 @@ private[debug] final class DebugProxy(
         "Initializing debugger",
         initialized.future,
       )
-      clientAdapter = ClientConfigurationAdapter.initialize(args)
+      clientAdapter = ClientConfigurationAdapter.initialize(
+        args,
+        sourceMapper,
+        buildServer,
+        sessionName,
+      )
       server.send(request)
     case request @ LaunchRequest(debugMode) =>
       this.debugMode = debugMode
@@ -107,8 +118,10 @@ private[debug] final class DebugProxy(
         breakpoint.setLine(line)
       }
 
+      val mappedMetalsSourcePath =
+        sourceMapper.mappedTo(metalsSourcePath).getOrElse(metalsSourcePath)
       val requests =
-        debugAdapter.adaptSetBreakpointsRequest(metalsSourcePath, args)
+        debugAdapter.adaptSetBreakpointsRequest(mappedMetalsSourcePath, args)
       server
         .sendPartitioned(requests.map(DebugProtocol.syntheticRequest))
         .map(_.map(DebugProtocol.parseResponse[SetBreakpointsResponse]))
@@ -176,10 +189,15 @@ private[debug] final class DebugProxy(
       import scala.meta.internal.metals.JsonParser._
       for {
         stackFrame <- args.getStackFrames
+        _ = stackFrame.setLine(
+          clientAdapter.adaptLineForClient(stackFrame.getLine)
+        )
         frameSource <- Option(stackFrame.getSource)
-        sourcePath <- Option(frameSource.getPath)
+        frameSourcePath <- Option(frameSource.getPath)
+        mappedSourcePath = mappedSourceFrom(frameSourcePath)
+        _ = frameSource.setPath(mappedSourcePath)
         metalsSource <- debugAdapter.adaptStackFrameSource(
-          sourcePath,
+          mappedSourcePath,
           frameSource.getName,
         )
       } frameSource.setPath(clientAdapter.adaptPathForClient(metalsSource))
@@ -206,6 +224,15 @@ private[debug] final class DebugProxy(
     case message =>
       initialized.trySuccess(())
       client.consume(message)
+  }
+
+  private def mappedSourceFrom(sourcePath: String): String = {
+    if (sourcePath.startsWith("file:") || sourcePath.startsWith("jar:"))
+      sourcePath
+    else {
+      val basePath = Paths.get(sourcePath).toUri.toAbsolutePath
+      sourceMapper.mappedFrom(basePath).getOrElse(basePath).toString()
+    }
   }
 
   def cancel(): Unit = {
@@ -240,6 +267,8 @@ private[debug] object DebugProxy {
       workspace: AbsolutePath,
       stripColor: Boolean,
       status: StatusBar,
+      sourceMapper: SourceMapper,
+      buildServer: BuildServerConnection,
   )(implicit ec: ExecutionContext): Future[DebugProxy] = {
     for {
       server <- connectToServer()
@@ -264,6 +293,8 @@ private[debug] object DebugProxy {
       compilers,
       stripColor,
       status,
+      sourceMapper,
+      buildServer,
     )
   }
 

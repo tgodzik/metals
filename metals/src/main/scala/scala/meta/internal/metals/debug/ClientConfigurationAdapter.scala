@@ -2,7 +2,9 @@ package scala.meta.internal.metals.debug
 
 import java.nio.file.Paths
 
+import scala.meta.internal.metals.BuildServerConnection
 import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.metals.SourceMapper
 import scala.meta.io.AbsolutePath
 
 import org.eclipse.lsp4j.Position
@@ -20,17 +22,19 @@ import org.eclipse.lsp4j.debug.SourceBreakpoint
 private[debug] final case class ClientConfigurationAdapter(
     pathFormat: String,
     linesStartAt1: Boolean,
+    sourceMapper: SourceMapper,
+    isScalaCliScript: Boolean,
 ) {
   // The scala-debug-adapter uses the JVM class file format
   // in which lines start at 1
   def normalizeLineForServer(line: Int): Int = {
-    if (linesStartAt1) line
-    else line + 1
+    val normalizedLine = if (linesStartAt1) line else line + 1
+    if (isScalaCliScript) normalizedLine + 5 else normalizedLine
   }
 
   def adaptLineForClient(line: Int): Int = {
-    if (linesStartAt1) line
-    else line - 1
+    val adaptedLine = if (linesStartAt1) line else line - 1
+    if (isScalaCliScript) adaptedLine - 5 else adaptedLine
   }
 
   def toLspPosition(breakpoint: SourceBreakpoint): Position = {
@@ -48,7 +52,8 @@ private[debug] final case class ClientConfigurationAdapter(
       // so URIs are actually sent in this case instead
       case InitializeRequestArgumentsPathFormat.PATH
           if !path.startsWith("file:") && !path.startsWith("jar:") =>
-        Paths.get(path).toUri.toString.toAbsolutePath
+        val uriPath = Paths.get(path).toUri.toString.toAbsolutePath
+        sourceMapper.mappedTo(uriPath).getOrElse(uriPath)
       case _ => path.toAbsolutePath
     }
   }
@@ -66,18 +71,32 @@ private[debug] object ClientConfigurationAdapter {
   private val defautlPathFormat = InitializeRequestArgumentsPathFormat.URI
   private val defaultLinesStartAt1 = false
 
-  def default: ClientConfigurationAdapter = {
-    ClientConfigurationAdapter(defautlPathFormat, defaultLinesStartAt1)
+  def default(sourceMapper: SourceMapper): ClientConfigurationAdapter = {
+    ClientConfigurationAdapter(
+      defautlPathFormat,
+      defaultLinesStartAt1,
+      sourceMapper,
+      false,
+    )
   }
 
   def initialize(
-      initRequest: InitializeRequestArguments
+      initRequest: InitializeRequestArguments,
+      sourceMapper: SourceMapper,
+      buildServer: BuildServerConnection,
+      sessionName: String,
   ): ClientConfigurationAdapter = {
     val pathFormat =
       Option(initRequest.getPathFormat).getOrElse(defautlPathFormat)
     val linesStartAt1 = Option(initRequest.getLinesStartAt1)
       .map(_.booleanValue)
       .getOrElse(defaultLinesStartAt1)
-    ClientConfigurationAdapter(pathFormat, linesStartAt1)
+    val isScalaScript = sessionName.endsWith("_sc") && buildServer.isScalaCLI
+    ClientConfigurationAdapter(
+      pathFormat,
+      linesStartAt1,
+      sourceMapper,
+      isScalaScript,
+    )
   }
 }
