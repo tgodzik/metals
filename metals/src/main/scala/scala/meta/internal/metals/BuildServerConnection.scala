@@ -34,6 +34,7 @@ import ch.epfl.scala.bsp4j._
 import com.google.gson.Gson
 import org.eclipse.lsp4j.jsonrpc.JsonRpcException
 import org.eclipse.lsp4j.jsonrpc.Launcher
+import org.eclipse.lsp4j.jsonrpc.MessageIssueException
 import org.eclipse.lsp4j.services.LanguageClient
 
 /**
@@ -88,16 +89,14 @@ class BuildServerConnection private (
   def supportsTestSelection: Boolean = isBloop || isSbt || isScalaCLI
 
   /* Some users may still use an old version of Bloop that relies on scala-debug-adapter 1.x.
-   * This method is used to do the switch between MetalsDebugAdapter1x and MetalsDebugAdapter2x.
-   * At some point we should drop the support for those old versions of Bloop and remove
-   * this method, also the MetalsDebugAdapter1x and the ClassFinder classes
+   * Metals does not support scala-debug-adapter 1.x anymore.
    */
   def usesScalaDebugAdapter2x: Boolean = {
     def supportNewDebugAdapter = SemVer.isCompatibleVersion(
       "1.4.10",
       version,
     )
-    isSbt || (isBloop && supportNewDebugAdapter)
+    isSbt || isScalaCLI || (isBloop && supportNewDebugAdapter)
   }
 
   def workspaceDirectory: AbsolutePath = workspace
@@ -372,6 +371,8 @@ class BuildServerConnection private (
               t match {
                 case _: CancellationException =>
                   scribe.info(message)
+                case issue: MessageIssueException =>
+                  scribe.info(issue.getRpcMessage().toString())
                 case _ =>
                   scribe.info(message, t)
               }

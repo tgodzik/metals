@@ -279,12 +279,12 @@ class MetalsLanguageServer(
   private var referencesProvider: ReferenceProvider = _
   private var callHierarchyProvider: CallHierarchyProvider = _
   private var workspaceSymbols: WorkspaceSymbolProvider = _
-  private val packageProvider: PackageProvider =
-    new PackageProvider(buildTargets)
+  private var packageProvider: PackageProvider = _
   private var newFileProvider: NewFileProvider = _
   private var debugProvider: DebugProvider = _
   private var symbolSearch: MetalsSymbolSearch = _
   private var compilers: Compilers = _
+  private var javaHighlightProvider: JavaDocumentHighlightProvider = _
   private var scalafixProvider: ScalafixProvider = _
   private var fileDecoderProvider: FileDecoderProvider = _
   private var testProvider: TestSuitesProvider = _
@@ -554,13 +554,6 @@ class MetalsLanguageServer(
           () => userConfig,
           buildTargets,
         )
-        newFileProvider = new NewFileProvider(
-          workspace,
-          languageClient,
-          packageProvider,
-          () => focusedDocument,
-          scalaVersionSelector,
-        )
         referencesProvider = new ReferenceProvider(
           workspace,
           semanticdbs,
@@ -570,15 +563,14 @@ class MetalsLanguageServer(
           trees,
           buildTargets,
         )
-        callHierarchyProvider = new CallHierarchyProvider(
+        packageProvider =
+          new PackageProvider(buildTargets, trees, referencesProvider)
+        newFileProvider = new NewFileProvider(
           workspace,
-          semanticdbs,
-          definitionProvider,
-          referencesProvider,
-          clientConfig.icons,
-          () => compilers,
-          trees,
-          buildTargets,
+          languageClient,
+          packageProvider,
+          () => focusedDocument,
+          scalaVersionSelector,
         )
         implementationProvider = new ImplementationProvider(
           semanticdbs,
@@ -595,6 +587,18 @@ class MetalsLanguageServer(
           languageClient,
           definitionProvider,
           implementationProvider,
+        )
+
+        callHierarchyProvider = new CallHierarchyProvider(
+          workspace,
+          semanticdbs,
+          definitionProvider,
+          referencesProvider,
+          clientConfig.icons,
+          () => compilers,
+          trees,
+          buildTargets,
+          supermethods,
         )
 
         val runTestLensProvider =
@@ -643,17 +647,7 @@ class MetalsLanguageServer(
           semanticdbs,
           stacktraceAnalyzer,
         )
-        renameProvider = new RenameProvider(
-          referencesProvider,
-          implementationProvider,
-          definitionProvider,
-          workspace,
-          languageClient,
-          buffers,
-          compilations,
-          clientConfig,
-          trees,
-        )
+
         syntheticsDecorator = new SyntheticsDecorationProvider(
           workspace,
           semanticdbs,
@@ -675,6 +669,10 @@ class MetalsLanguageServer(
           ),
           buildTargets,
           workspace,
+        )
+        javaHighlightProvider = new JavaDocumentHighlightProvider(
+          definitionProvider,
+          semanticdbs,
         )
         workspaceSymbols = new WorkspaceSymbolProvider(
           workspace,
@@ -708,22 +706,33 @@ class MetalsLanguageServer(
             sourceMapper,
           )
         )
+        renameProvider = new RenameProvider(
+          referencesProvider,
+          implementationProvider,
+          definitionProvider,
+          workspace,
+          languageClient,
+          buffers,
+          compilations,
+          compilers,
+          clientConfig,
+          trees,
+        )
         debugProvider = register(
           new DebugProvider(
             workspace,
-            definitionProvider,
             buildTargets,
             buildTargetClasses,
             compilations,
             languageClient,
             buildClient,
-            classFinder,
             definitionIndex,
             stacktraceAnalyzer,
             clientConfig,
             semanticdbs,
             compilers,
             statusBar,
+            sourceMapper,
           )
         )
         scalafixProvider = ScalafixProvider(
@@ -926,6 +935,25 @@ class MetalsLanguageServer(
         textDocumentSyncOptions.setChange(TextDocumentSyncKind.Full)
         textDocumentSyncOptions.setSave(new SaveOptions(true))
         textDocumentSyncOptions.setOpenClose(true)
+
+        val scalaFilesPattern = new FileOperationPattern("**/*.scala")
+        scalaFilesPattern.setMatches(FileOperationPatternKind.File)
+        val folderFilesPattern = new FileOperationPattern("**/")
+        folderFilesPattern.setMatches(FileOperationPatternKind.Folder)
+        val fileOperationOptions = new FileOperationOptions(
+          List(
+            new FileOperationFilter(scalaFilesPattern),
+            new FileOperationFilter(folderFilesPattern),
+          ).asJava
+        )
+        val fileOperationsServerCapabilities =
+          new FileOperationsServerCapabilities()
+        fileOperationsServerCapabilities.setWillRename(fileOperationOptions)
+        val workspaceCapabilities = new WorkspaceServerCapabilities()
+        workspaceCapabilities.setFileOperations(
+          fileOperationsServerCapabilities
+        )
+        capabilities.setWorkspace(workspaceCapabilities)
 
         capabilities.setTextDocumentSync(textDocumentSyncOptions)
 
@@ -1527,7 +1555,7 @@ class MetalsLanguageServer(
       compilers
         .hover(params, token)
         .map { hover =>
-          syntheticsDecorator.addSyntheticsHover(params, hover)
+          syntheticsDecorator.addSyntheticsHover(params, hover.map(_.toLsp()))
         }
         .map(
           _.orElse {
@@ -1544,8 +1572,14 @@ class MetalsLanguageServer(
   @JsonRequest("textDocument/documentHighlight")
   def documentHighlights(
       params: TextDocumentPositionParams
-  ): CompletableFuture[util.List[DocumentHighlight]] =
-    CancelTokens.future { token => compilers.documentHighlight(params, token) }
+  ): CompletableFuture[util.List[DocumentHighlight]] = {
+    if (params.getTextDocument.getUri.toAbsolutePath.isJava)
+      CancelTokens { _ => javaHighlightProvider.documentHighlight(params) }
+    else
+      CancelTokens.future { token =>
+        compilers.documentHighlight(params, token)
+      }
+  }
 
   @JsonRequest("textDocument/documentSymbol")
   def documentSymbol(
@@ -1607,7 +1641,9 @@ class MetalsLanguageServer(
   def rename(
       params: RenameParams
   ): CompletableFuture[WorkspaceEdit] =
-    CancelTokens.future { token => renameProvider.rename(params, token) }
+    CancelTokens.future { token =>
+      renameProvider.rename(params, token)
+    }
 
   @JsonRequest("textDocument/references")
   def references(
@@ -1984,10 +2020,7 @@ class MetalsLanguageServer(
           params <- debugSessionParams
           server <- statusBar.trackFuture(
             "Starting debug server",
-            debugProvider.start(
-              params,
-              scalaVersionSelector,
-            ),
+            debugProvider.start(params),
           )
         } yield {
           statusBar.addMessage("Started debug server!")
@@ -2103,6 +2136,20 @@ class MetalsLanguageServer(
         Future.successful(()).asJavaObject
     }
   }
+
+  @JsonRequest("workspace/willRenameFiles")
+  def willRenameFiles(
+      params: RenameFilesParams
+  ): CompletableFuture[WorkspaceEdit] =
+    CancelTokens.future { _ =>
+      val moves = params.getFiles.asScala.toSeq.map { rename =>
+        packageProvider.willMovePath(
+          rename.getOldUri().toAbsolutePath,
+          rename.getNewUri().toAbsolutePath,
+        )
+      }
+      Future.sequence(moves).map(_.mergeChanges)
+    }
 
   @JsonNotification("metals/doctorVisibilityDidChange")
   def doctorVisibilityDidChange(
@@ -2282,7 +2329,12 @@ class MetalsLanguageServer(
             case Some(digest) if isBloopOrEmpty =>
               slowConnectToBloopServer(forceImport, buildTool, digest)
             case Some(digest) =>
-              indexer.reloadWorkspaceAndIndex(forceImport, buildTool, digest)
+              indexer.reloadWorkspaceAndIndex(
+                forceImport,
+                buildTool,
+                digest,
+                importBuild,
+              )
           }
         case None =>
           Future.successful(BuildChange.None)
@@ -2440,15 +2492,8 @@ class MetalsLanguageServer(
     }
   }
 
-  private def connectToNewBuildServer(
-      session: BspSession
-  ): Future[BuildChange] = {
-    scribe.info(
-      s"Connected to Build server: ${session.main.name} v${session.version}"
-    )
-    cancelables.add(session)
+  private def importBuild(session: BspSession) = {
     compilers.cancel()
-    bspSession = Some(session)
     val importedBuilds0 = timerProvider.timed("Imported build") {
       session.importBuilds()
     }
@@ -2461,16 +2506,26 @@ class MetalsLanguageServer(
           targets.map(t => (t.getId(), bspBuild.connection))
         }
         mainBuildTargetsData.resetConnections(idToConnection)
-        lastImportedBuilds = bspBuilds.map(_.build)
       }
+    } yield ()
+  }
+
+  private def connectToNewBuildServer(
+      session: BspSession
+  ): Future[BuildChange] = {
+    scribe.info(
+      s"Connected to Build server: ${session.main.name} v${session.version}"
+    )
+    cancelables.add(session)
+    bspSession = Some(session)
+    for {
+      _ <- importBuild(session)
       _ <- indexer.profiledIndexWorkspace(() => doctor.check())
       _ = if (session.main.isBloop) checkRunningBloopVersion(session.version)
     } yield {
       BuildChange.Reconnected
     }
   }
-
-  private var lastImportedBuilds = List.empty[ImportedBuild]
 
   val scalaCli: ScalaCli = register(
     new ScalaCli(
@@ -2506,7 +2561,9 @@ class MetalsLanguageServer(
         Indexer.BuildTool(
           "main",
           mainBuildTargetsData,
-          ImportedBuild.fromList(lastImportedBuilds),
+          ImportedBuild.fromList(
+            bspSession.map(_.lastImportedBuild).getOrElse(Nil)
+          ),
         ),
         Indexer.BuildTool(
           "ammonite",

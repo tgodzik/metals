@@ -93,9 +93,6 @@ class CompletionSuite extends BaseCompletionSuite {
       |""".stripMargin,
     """|getOrElse[V1 >: String](key: Int, default: => V1): V1
        |""".stripMargin,
-    compat = Map(
-      "2.11" -> "getOrElse[B1 >: String](key: Int, default: => B1): B1"
-    ),
   )
 
   check(
@@ -402,10 +399,6 @@ class CompletionSuite extends BaseCompletionSuite {
                    |FromJavaBiConsumer - scala.jdk.FunctionWrappers
                    |FromJavaIntConsumer - scala.jdk.FunctionWrappers
                    |""".stripMargin,
-      "2.11" -> """|JavaConverters - scala.collection
-                   |JavaConversions - scala.collection
-                   |JavaConversions - scala.concurrent
-                   |""".stripMargin,
       "3" -> """|AsJavaConverters - scala.collection.convert
                 |JavaConverters - scala.collection
                 |JavaConversions - scala.concurrent
@@ -550,8 +543,7 @@ class CompletionSuite extends BaseCompletionSuite {
        |""".stripMargin,
     includeCommitCharacter = true,
     compat = Map(
-      "2.11" -> "empty[A, B]: Map[A,B] (commit: '')",
-      "3" -> "empty[K, V]: Map[K, V] (commit: '')", // space between K V
+      "3" -> "empty[K, V]: Map[K, V] (commit: '')" // space between K V
     ),
   )
 
@@ -646,9 +638,6 @@ class CompletionSuite extends BaseCompletionSuite {
     """.stripMargin,
     """|toCharArray(): Array[Char]
        |""".stripMargin,
-    compat = Map(
-      "2.11" -> "" // SAM was introduced in Scala 2.12
-    ),
   )
 
   check(
@@ -792,12 +781,6 @@ class CompletionSuite extends BaseCompletionSuite {
            |until(end: Long): NumericRange.Exclusive[Long]
            |until(end: Long, step: Long): NumericRange.Exclusive[Long]
            |""".stripMargin,
-      "2.11" ->
-        """|until(end: Double): Range.Partial[Double,NumericRange[Double]]
-           |until(end: Double, step: Double): NumericRange.Exclusive[Double]
-           |until(end: Long): NumericRange.Exclusive[Long]
-           |until(end: Long, step: Long): NumericRange.Exclusive[Long]
-           |""".stripMargin,
       "3" ->
         """|until(end: Int): Range
            |until(end: Int, step: Int): Range
@@ -934,7 +917,7 @@ class CompletionSuite extends BaseCompletionSuite {
         |    case Som@@
         |}
         |""".stripMargin,
-    """|Some scala
+    """|Some(value) scala
        |""".stripMargin,
     compat = Map(
       "3" ->
@@ -994,14 +977,14 @@ class CompletionSuite extends BaseCompletionSuite {
         |    case S@@
         |}
         |""".stripMargin,
-    """|Some scala
+    """|Some(value) scala
        |Seq scala.collection
        |Set scala.collection.immutable
        |""".stripMargin,
     topLines = Some(3),
     compat = Map(
       "2.13" ->
-        """|Some scala
+        """|Some(value) scala
            |Seq scala.collection.immutable
            |Set scala.collection.immutable
            |""".stripMargin,
@@ -1020,14 +1003,14 @@ class CompletionSuite extends BaseCompletionSuite {
         |    case _: S@@
         |}
         |""".stripMargin,
-    """|Some scala
+    """|Some[_] scala
        |Seq scala.collection
        |Set scala.collection.immutable
        |""".stripMargin,
     topLines = Some(3),
     compat = Map(
       "2.13" ->
-        """|Some scala
+        """|Some[_] scala
            |Seq scala.collection.immutable
            |Set scala.collection.immutable
            |""".stripMargin,
@@ -1053,8 +1036,8 @@ class CompletionSuite extends BaseCompletionSuite {
         |  }
         |}
         |""".stripMargin,
-    """|Number: Regex
-       |NotString: Int
+    """|NotString: Int
+       |Number: Regex
        |Nil scala.collection.immutable
        |""".stripMargin,
     topLines = Option(3),
@@ -1526,4 +1509,17 @@ class CompletionSuite extends BaseCompletionSuite {
     ),
     topLines = Some(1),
   )
+
+  check(
+    "wildcard-param",
+    """
+      |object A {
+      |  List(1, 3, 4).map { _ =>
+      |    @@
+      |  }
+      |}""".stripMargin,
+    "",
+    filter = _.startsWith("_"),
+  )
+
 }

@@ -26,6 +26,13 @@ class SbtServerSuite
   val supportedBspVersion = V.sbtVersion
   val scalaVersion = V.scala213
   val buildTool: SbtBuildTool = SbtBuildTool(None, () => userConfig)
+  var compilationCount = 0
+
+  override def beforeEach(context: BeforeEach): Unit = {
+    compilationCount = 0
+    onStartCompilation = { () => compilationCount += 1 }
+    super.beforeEach(context)
+  }
 
   override def currentDigest(
       workspace: AbsolutePath
@@ -97,12 +104,22 @@ class SbtServerSuite
     cleanWorkspace()
     client.importBuildChanges = ImportBuildChanges.yes
     for {
-      _ <- initialize(SbtBuildLayout("", V.scala213))
+      _ <- initialize(
+        SbtBuildLayout(
+          """|/a/src/main/scala/A.scala
+             |
+             |object A{
+             |
+             |}
+             |""".stripMargin,
+          V.scala213,
+        )
+      )
       // reload build after build.sbt changes
       _ <- server.executeCommand(ServerCommands.ResetNotifications)
       _ <- server.didSave("build.sbt") { text =>
         s"""$text
-           |ibraryDependencies += "com.lihaoyi" %% "sourcecode" % "0.1.4"
+           |ibraryDependencies += "com.lihaoyi" %% "sourcecode" % "0.3.0"
            |""".stripMargin
       }
       _ = {
@@ -112,14 +129,38 @@ class SbtServerSuite
         )
         client.showMessages.clear()
       }
-      _ <- server.didSave("build.sbt") { _ =>
-        s"""scalaVersion := "${V.scala213}"
-           |libraryDependencies += "com.lihaoyi" %% "sourcecode" % "0.1.4"
-           |""".stripMargin
+      _ <- server.didSave("build.sbt") { text =>
+        text.replace("ibraryDependencies", "libraryDependencies")
       }
       _ = {
         assert(client.workspaceErrorShowMessages.isEmpty)
       }
+      _ <- server.didSave("build.sbt") { text =>
+        text.replace(
+          "val a = project.in(file(\"a\"))",
+          """|val a = project.in(file("a")).settings(
+             |  libraryDependencies += "org.scalameta" %% "scalameta" % "4.6.0"
+             |)
+             |""".stripMargin,
+        )
+      }
+      _ = {
+        assert(client.workspaceErrorShowMessages.isEmpty)
+      }
+      _ <- server.didSave("a/src/main/scala/A.scala") { _ =>
+        """|object A{
+           |  val a: scala.meta.Defn.Class = ???
+           |}
+           |""".stripMargin
+      }
+      _ <- server.assertHoverAtLine(
+        "a/src/main/scala/A.scala",
+        "  val a: scala.meta.Defn.C@@lass = ???",
+        """|```scala
+           |abstract trait Class: Defn.Class
+           |```
+           |""".stripMargin,
+      )
     } yield ()
   }
 
@@ -204,6 +245,34 @@ class SbtServerSuite
           "meta-build-target-test",
         ).mkString("\n"),
       )
+    }
+  }
+
+  test("infinite-loop") {
+    cleanWorkspace()
+    val layout =
+      s"""|/project/build.properties
+          |sbt.version=$supportedMetaBuildVersion
+          |/build.sbt
+          |${SbtBuildLayout.commonSbtSettings}
+          |Compile / sourceGenerators += Def.task {
+          |  val content = "object Foo\\n"
+          |  val file = target.value / "Foo.scala"
+          |  IO.write(file, content)
+          |  Seq(file)
+          |}
+          |""".stripMargin
+    for {
+      _ <- initialize(layout)
+      // make sure to compile once
+      _ <- server.server.compilations.compileFile(
+        workspace.resolve("target/Foo.scala")
+      )
+    } yield {
+      // Sleep 100 ms: that should be enough to see the compilation looping
+      Thread.sleep(100)
+      // Check that the compilation is not looping
+      assertEquals(compilationCount, 1)
     }
   }
 }

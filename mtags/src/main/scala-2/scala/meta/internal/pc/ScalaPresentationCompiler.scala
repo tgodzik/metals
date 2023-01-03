@@ -21,8 +21,10 @@ import scala.tools.nsc.reporters.StoreReporter
 import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.internal.metals.EmptyCancelToken
 import scala.meta.internal.mtags.BuildInfo
+import scala.meta.internal.mtags.MtagsEnrichments._
 import scala.meta.pc.AutoImportsResult
 import scala.meta.pc.DefinitionResult
+import scala.meta.pc.HoverSignature
 import scala.meta.pc.OffsetParams
 import scala.meta.pc.PresentationCompiler
 import scala.meta.pc.PresentationCompilerConfig
@@ -34,7 +36,7 @@ import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionList
 import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.DocumentHighlight
-import org.eclipse.lsp4j.Hover
+import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.SelectionRange
 import org.eclipse.lsp4j.SignatureHelp
 import org.eclipse.lsp4j.TextEdit
@@ -212,11 +214,32 @@ case class ScalaPresentationCompiler(
       params.token
     ) { pc => new SignatureHelpProvider(pc.compiler()).signatureHelp(params) }
 
+  override def prepareRename(
+      params: OffsetParams
+  ): CompletableFuture[ju.Optional[Range]] =
+    compilerAccess.withNonInterruptableCompiler(
+      Optional.empty[Range](),
+      params.token
+    ) { pc =>
+      new PcRenameProvider(pc.compiler(), params, None).prepareRename().asJava
+    }
+
+  override def rename(
+      params: OffsetParams,
+      name: String
+  ): CompletableFuture[ju.List[TextEdit]] =
+    compilerAccess.withNonInterruptableCompiler(
+      List[TextEdit]().asJava,
+      params.token
+    ) { pc =>
+      new PcRenameProvider(pc.compiler(), params, Some(name)).rename().asJava
+    }
+
   override def hover(
       params: OffsetParams
-  ): CompletableFuture[Optional[Hover]] =
+  ): CompletableFuture[Optional[HoverSignature]] =
     compilerAccess.withNonInterruptableCompiler(
-      Optional.empty[Hover](),
+      Optional.empty[HoverSignature](),
       params.token
     ) { pc =>
       Optional.ofNullable(
@@ -247,7 +270,7 @@ case class ScalaPresentationCompiler(
       List.empty[DocumentHighlight].asJava,
       params.token()
     ) { pc =>
-      new PcDocumentHighlightProvider(pc.compiler()).highlights(params).asJava
+      new PcDocumentHighlightProvider(pc.compiler(), params).highlights().asJava
     }
 
   override def semanticdbTextDocument(

@@ -682,12 +682,13 @@ final case class TestingServer(
   }
 
   def startDebuggingUnresolved(
-      params: AnyRef
+      params: AnyRef,
+      stoppageHandler: Stoppage.Handler = Stoppage.Handler.Continue,
   ): Future[TestDebugger] = {
     assertSystemExit(params)
     executeCommandUnsafe(ServerCommands.StartDebugAdapter.id, Seq(params))
       .collect { case DebugSession(_, uri) =>
-        TestDebugger(URI.create(uri), Stoppage.Handler.Continue)
+        TestDebugger(URI.create(uri), stoppageHandler)
       }
   }
 
@@ -783,6 +784,30 @@ final case class TestingServer(
 
     val params = new DidChangeConfigurationParams(didChangeJson)
     server.didChangeConfiguration(params).asScala
+  }
+
+  def willRenameFiles(
+      workspaceFiles: Set[String],
+      fileRenames: Map[String, String],
+  ): Future[Map[String, String]] = {
+    val lspRenames = fileRenames.toList.map { case (oldFilename, newFilename) =>
+      val oldUri = workspace.resolve(oldFilename).toURI.toString
+      val newUri = workspace.resolve(newFilename).toURI.toString
+      new l.FileRename(oldUri, newUri)
+    }.asJava
+    val params = new l.RenameFilesParams(lspRenames)
+    for {
+      editsOrNull <- server.willRenameFiles(params).asScala
+      edits = Option(editsOrNull).getOrElse(new WorkspaceEdit)
+      updatedSources = workspaceFiles.map { file =>
+        val path = workspace.resolve(file)
+        val code = path.readText
+        val updatedCode = TestRanges
+          .renderEditAsString(file, code, edits)
+          .getOrElse(code)
+        file -> updatedCode
+      }.toMap
+    } yield updatedSources
   }
 
   def completionList(

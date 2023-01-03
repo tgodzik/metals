@@ -55,6 +55,7 @@ object OverrideCompletions:
       search: SymbolSearch,
       config: PresentationCompilerConfig,
       autoImportsGen: AutoImportsGenerator,
+      fallbackName: Option[Name],
   ): List[CompletionValue] =
     import indexedContext.ctx
     val clazz = td.symbol.asClass
@@ -87,6 +88,7 @@ object OverrideCompletions:
     // because they are not method definitions (not starting from `def`).
     val flags = completing.map(_.flags & interestingFlags).getOrElse(EmptyFlags)
 
+    val name = completing.fold(fallbackName)(sym => Some(sym.name))
     // not using `td.tpe.abstractTermMembers` because those members includes
     // the abstract members in `td.tpe`. For example, when we type `def foo@@`,
     // `td.tpe.abstractTermMembers` contains `method foo: <error>` and it overrides the parent `foo` method.
@@ -100,8 +102,8 @@ object OverrideCompletions:
       .distinct
       .collect {
         case denot
-            if completing
-              .fold(true)(sym => denot.name.startsWith(sym.name.show)) &&
+            if name
+              .fold(true)(name => denot.name.startsWith(name.show)) &&
               !denot.symbol.isType =>
           denot.symbol
       }
@@ -169,8 +171,13 @@ object OverrideCompletions:
     val pos = driver.sourcePosition(params)
 
     val newctx = driver.currentCtx.fresh.setCompilationUnit(unit)
+    val tpdTree = newctx.compilationUnit.tpdTree
     val path =
-      Interactive.pathTo(newctx.compilationUnit.tpdTree, pos.span)(using newctx)
+      Interactive.pathTo(tpdTree, pos.span)(using newctx) match
+        case path @ TypeDef(_, template) :: _ =>
+          template :: path
+        case path => path
+
     val indexedContext = IndexedContext(
       MetalsInteractive.contextOfPath(path)(using newctx)
     )
@@ -398,7 +405,8 @@ object OverrideCompletions:
       // should be completed as `def iterator: Iterator[Int]` instead of `Iterator[A]`.
       val seenFrom =
         val memInfo = defn.tpe.memberInfo(sym.symbol)
-        if memInfo.isErroneous then sym.info
+        if memInfo.isErroneous || memInfo.finalResultType.isAny then
+          sym.info.widenTermRefExpr
         else memInfo
 
       if sym.is(Method) then
@@ -496,19 +504,21 @@ object OverrideCompletions:
               completing,
               dd.sourcePos.start,
               true,
+              None,
             )
           )
 
         // class FooImpl extends Foo:
         //   ov|
         case (ident: Ident) :: (t: Template) :: (td: TypeDef) :: _
-            if t.parents.nonEmpty && ident.name.startsWith("o") =>
+            if t.parents.nonEmpty && "override".startsWith(ident.name.show) =>
           Some(
             (
               td,
               None,
               ident.sourcePos.start,
               false,
+              None,
             )
           )
 
@@ -521,6 +531,7 @@ object OverrideCompletions:
               None,
               t.sourcePos.start,
               true,
+              None,
             )
           )
 
@@ -534,8 +545,24 @@ object OverrideCompletions:
               Some(sel.symbol),
               sel.sourcePos.start,
               false,
+              None,
             )
           )
+
+        // class Main extends Val:
+        //    he@@ // incomplete symbol
+        case (id: Ident) :: (t: Template) :: (td: TypeDef) :: _
+            if t.parents.nonEmpty =>
+          Some(
+            (
+              td,
+              None,
+              id.sourcePos.start,
+              false,
+              Some(id.name),
+            )
+          )
+
         case _ => None
 
   end OverrideExtractor

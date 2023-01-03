@@ -3,7 +3,6 @@ package tests.pc
 import tests.BaseCompletionSuite
 
 class CompletionMatchSuite extends BaseCompletionSuite {
-
   override def requiresScalaLibrarySources: Boolean = true
 
   check(
@@ -213,15 +212,6 @@ class CompletionMatchSuite extends BaseCompletionSuite {
        |}
        |""".stripMargin,
     compat = Map(
-      "2.11.12" ->
-        """package sort
-          |object App {
-          |  Option(1) match {
-          |\tcase Some(x) => $0
-          |\tcase None =>
-          |}
-          |}
-          |""".stripMargin,
       "3" -> s"""package sort
                 |object App {
                 |  Option(1) match
@@ -229,7 +219,7 @@ class CompletionMatchSuite extends BaseCompletionSuite {
                 |\tcase None =>
                 |
                 |}
-                |""".stripMargin,
+                |""".stripMargin
     ),
     filter = _.contains("exhaustive"),
   )
@@ -252,9 +242,6 @@ class CompletionMatchSuite extends BaseCompletionSuite {
     """|match
        |match (exhaustive) Foo (2 cases)
        |""".stripMargin,
-    compat = Map(
-      "2.11" -> "match"
-    ),
   )
 
   checkEdit(
@@ -476,18 +463,23 @@ class CompletionMatchSuite extends BaseCompletionSuite {
     ),
   )
   check(
-    "exhaustive-map".tag(IgnoreScala2),
+    "exhaustive-map",
     """
       |object A {
       |  List(Option(1)).map{ ca@@ }
       |}""".stripMargin,
-    """|case (exhaustive) Option (2 cases)
+    """|case (exhaustive) Option[A] (2 cases)
        |""".stripMargin,
+    compat = Map(
+      "3" ->
+        """|case (exhaustive) Option (2 cases)
+           |""".stripMargin
+    ),
     filter = _.contains("exhaustive"),
   )
 
   checkEdit(
-    "exhaustive-map-edit".tag(IgnoreScala2),
+    "exhaustive-map-edit",
     """
       |object A {
       |  List(Option(1)).map{cas@@}

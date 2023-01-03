@@ -14,15 +14,6 @@ class CompletionCaseSuite extends BaseCompletionSuite {
       _parameterHintsCommand = paramHint
     )
 
-  override val compatProcess: Map[String, String => String] = Map(
-    "2.11" -> { (s: String) =>
-      // The standard library renamed fields of Some/Left/Right for 2.12.0.
-      s.replace("Some(value)", "Some(x)")
-        .replace("Left(value)", "Left(a)")
-        .replace("Right(value)", "Right(b)")
-    }
-  )
-
   check(
     "empty",
     """
@@ -54,7 +45,8 @@ class CompletionCaseSuite extends BaseCompletionSuite {
       |    @@
       |  }
       |}""".stripMargin,
-    """|case Bird(name) => pkg
+    """|case _: Animal => pkg
+       |case Bird(name) => pkg
        |case _: Cat => pkg
        |case _: Dog => pkg
        |case Elephant => pkg
@@ -163,9 +155,7 @@ class CompletionCaseSuite extends BaseCompletionSuite {
     """|case Cls(a, b) => `sealed-two`.Outer
        |""".stripMargin,
     compat = Map(
-      // known-direct subclasses doesn't work well in 2.11 apparently.
-      "2.11" -> "",
-      "3" -> "case Cls(a, b) => sealed-two.Outer",
+      "3" -> "case Cls(a, b) => sealed-two.Outer"
     ),
   )
 
@@ -284,6 +274,7 @@ class CompletionCaseSuite extends BaseCompletionSuite {
       |}""".stripMargin,
     """|case None => scala
        |case Some(value) => scala
+       |case (exhaustive) Option[A] (2 cases)
        |""".stripMargin,
     compat = Map("3" -> """|case None => scala
                            |case Some(value) => scala
@@ -329,6 +320,7 @@ class CompletionCaseSuite extends BaseCompletionSuite {
       |}""".stripMargin,
     """|case None => scala
        |case Some(value) => scala
+       |case (exhaustive) Option[A] (2 cases)
        |""".stripMargin,
     compat = Map("3" -> """|case None => scala
                            |case Some(value) => scala
@@ -346,6 +338,7 @@ class CompletionCaseSuite extends BaseCompletionSuite {
       |}""".stripMargin,
     """|case None => scala
        |case Some(value) => scala
+       |case (exhaustive) Option[A] (2 cases)
        |""".stripMargin,
     compat = Map("3" -> """|case None => scala
                            |case Some(value) => scala

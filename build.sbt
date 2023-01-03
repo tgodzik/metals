@@ -9,7 +9,7 @@ Global / onChangedBuildSource := ReloadOnSourceChanges
 Global / resolvers += "scala-integration" at
   "https://scala-ci.typesafe.com/artifactory/scala-integration/"
 
-def localSnapshotVersion = "0.11.10-SNAPSHOT"
+def localSnapshotVersion = "0.11.11-SNAPSHOT"
 def isCI = System.getenv("CI") != null
 
 def isScala211(v: Option[(Long, Long)]): Boolean = v.contains((2, 11))
@@ -373,12 +373,12 @@ lazy val metals = project
       "io.undertow" % "undertow-core" % "2.2.20.Final",
       "org.jboss.xnio" % "xnio-nio" % "3.8.8.Final",
       // for persistent data like "dismissed notification"
-      "org.flywaydb" % "flyway-core" % "9.7.0",
+      "org.flywaydb" % "flyway-core" % "9.10.2",
       "com.h2database" % "h2" % "2.1.214",
       // for BSP
-      "org.scala-sbt.ipcsocket" % "ipcsocket" % "1.5.0",
+      "org.scala-sbt.ipcsocket" % "ipcsocket" % "1.6.1",
       "ch.epfl.scala" % "bsp4j" % V.bsp,
-      "ch.epfl.scala" %% "bloop-launcher" % V.bloopNightly,
+      "ch.epfl.scala" %% "bloop-launcher" % V.bloop,
       // for LSP
       V.lsp4j,
       // for DAP
@@ -441,10 +441,12 @@ lazy val metals = project
       "bspVersion" -> V.bsp,
       "sbtVersion" -> sbtVersion.value,
       "bloopVersion" -> V.bloop,
+      "bloopConfigVersion" -> V.bloopConfig,
       "bloopNightlyVersion" -> V.bloop,
       "sbtBloopVersion" -> V.sbtBloop,
       "gradleBloopVersion" -> V.gradleBloop,
       "mavenBloopVersion" -> V.mavenBloop,
+      "gradleBloopVersion" -> V.gradleBloop,
       "scalametaVersion" -> V.scalameta,
       "semanticdbVersion" -> V.semanticdb,
       "javaSemanticdbVersion" -> V.javaSemanticdb,
@@ -646,6 +648,8 @@ lazy val metalsDependencies = project
       "com.olegpy" %% "better-monadic-for" % V.betterMonadicFor,
       "com.lihaoyi" % "mill-contrib-testng" % V.mill,
       "org.virtuslab.scala-cli" % "cli_3" % V.scalaCli intransitive (),
+      "ch.epfl.scala" % "bloop-maven-plugin" % V.mavenBloop,
+      "ch.epfl.scala" %% "gradle-bloop" % V.gradleBloop,
     ),
   )
   .disablePlugins(ScalafixPlugin)
@@ -661,7 +665,7 @@ lazy val unit = project
     Test / javaOptions += "-Xmx2G",
     libraryDependencies ++= List(
       "io.get-coursier" %% "coursier" % V.coursier, // for jars
-      "ch.epfl.scala" %% "bloop-config" % V.bloop,
+      "ch.epfl.scala" %% "bloop-config" % V.bloopConfig,
       "org.scalameta" %% "munit" % V.munit,
     ),
     buildInfoPackage := "tests",

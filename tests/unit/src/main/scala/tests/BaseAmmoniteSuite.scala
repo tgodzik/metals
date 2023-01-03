@@ -114,11 +114,23 @@ abstract class BaseAmmoniteSuite(scalaVersion: String)
             |
             |val schema = Schema.loadFromString("{}")
             |println(schema.isSuccess)
+            |
+            |/build.sc
+            |
+            |// this part may contain some config
+            |@
+            |import mill._
+            |import mill.scalalib._
+            |object demo extends ScalaModule {
+            |  def scalaVersion: T[String] = T("2.13.10")
+            |}
             |""".stripMargin
       )
       _ <- server.didOpen("main.sc")
       _ <- server.executeCommand(ServerCommands.StartAmmoniteBuildServer)
       _ <- server.didSave("main.sc")(identity)
+      _ = assertNoDiagnostics()
+      _ <- server.didOpen("build.sc")
       _ = assertNoDiagnostics()
     } yield ()
   }
@@ -608,7 +620,7 @@ abstract class BaseAmmoniteSuite(scalaVersion: String)
            |/main.sc
            |import $$ivy.`io.cir`
            |import $$ivy.`io.circe::circe-ref`
-           |import $$ivy.`io.circe::circe-yaml:0.14`
+           |import $$ivy.`com.lihaoyi::upickle:1.4`
            |""".stripMargin
       )
       _ <- server.didOpen("main.sc")
@@ -641,10 +653,11 @@ abstract class BaseAmmoniteSuite(scalaVersion: String)
       )
       _ = assertNoDiff(artefactCompletionList, artefactExpectedCompletionList)
 
-      versionExpectedCompletionList = List("0.14.2", "0.14.1", "0.14.0")
+      versionExpectedCompletionList =
+        List("1.4.4", "1.4.3", "1.4.2", "1.4.1", "1.4.0")
       response <- server.completionList(
         "main.sc",
-        "import $ivy.`io.circe::circe-yaml:0.14@@`",
+        "import $ivy.`com.lihaoyi::upickle:1.4@@`",
       )
       versionCompletionList = response
         .getItems()
@@ -654,7 +667,7 @@ abstract class BaseAmmoniteSuite(scalaVersion: String)
       _ = assertEquals(versionCompletionList, versionExpectedCompletionList)
       noCompletions <- server.completion(
         "main.sc",
-        "import $ivy.`io.circe::circe-yaml:0.14`@@",
+        "import $ivy.`com.lihaoyi::upickle:1.4`@@",
       )
       _ = assertNoDiff(noCompletions, "")
     } yield ()

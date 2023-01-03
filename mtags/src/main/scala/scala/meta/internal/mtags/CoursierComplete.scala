@@ -5,6 +5,7 @@ import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.Try
 import scala.util.matching.Regex
 
 import scala.meta.internal.semver.SemVer.Version
@@ -49,7 +50,11 @@ object CoursierComplete {
     val allCompletions = (scalaCompletions ++ javaCompletions).distinct
     // Attempt to sort versions in reverse order
     if (dependency.replaceAll(":+", ":").count(_ == ':') == 2)
-      allCompletions.sortWith(Version.fromString(_) >= Version.fromString(_))
+      Try {
+        allCompletions.sortWith(
+          Version.fromString(_) >= Version.fromString(_)
+        )
+      }.getOrElse(allCompletions.sortWith(_ >= _))
     else allCompletions
   }
 
@@ -70,10 +75,10 @@ object CoursierComplete {
     (editStart, editEnd)
   }
 
-  val reg: Regex = """//>\s*using\s+libs?\s+"?(.*)""".r
+  val reg: Regex = """//>\s*using\s+(lib|plugin)s?\s+"?(.*)""".r
   def isScalaCliDep(line: String): Option[String] = {
     line match {
-      case reg(deps) =>
+      case reg(_, deps) =>
         val dep =
           deps.split(",").last
         if (dep.endsWith("\"") || dep.endsWith(" ")) None

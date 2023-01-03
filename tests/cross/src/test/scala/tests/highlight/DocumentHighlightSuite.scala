@@ -657,7 +657,7 @@ class DocumentHighlightSuite extends BaseDocumentHighlightSuite {
 
   check(
     // Scala 2.12.x has a bug where the namePos points at `object`
-    // working around would it involve a lot of additional logic
+    // working around it would involve a lot of additional logic
     "package-object".tag(IgnoreScala212),
     """|package example
        |
@@ -678,4 +678,14 @@ class DocumentHighlightSuite extends BaseDocumentHighlightSuite {
        |  }
        |}""".stripMargin,
   )
+
+  check(
+    "backtick",
+    """|object Main {
+       |  val <<`hi-!`>> = 5
+       |
+       |  <<`hi@@-!`>> + 3
+       |}""".stripMargin,
+  )
+
 }

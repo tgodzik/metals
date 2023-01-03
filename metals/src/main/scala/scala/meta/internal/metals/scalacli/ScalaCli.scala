@@ -319,7 +319,7 @@ object ScalaCli {
         finished.tryComplete(res)
       }
       SocketConnection(
-        "ScalaCli",
+        ScalaCli.name,
         new ClosableOutputStream(proc.outputStream, "Scala CLI error stream"),
         proc.inputStream,
         List(Cancelable { () => proc.cancel }),
@@ -371,7 +371,7 @@ object ScalaCli {
   def scalaCliMainClass: String =
     "scala.cli.ScalaCli"
 
-  val name = "ScalaCli"
+  val name = "scala-cli"
 
   sealed trait ConnectionState
   object ConnectionState {
