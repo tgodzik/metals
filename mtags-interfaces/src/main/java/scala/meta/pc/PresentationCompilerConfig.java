@@ -107,6 +107,11 @@ public interface PresentationCompilerConfig {
      */
     List<String> semanticdbCompilerOptions();
 
+    /** 
+     * Used to generate links for hover if possible for the editor.
+     */
+    String linkFormat(String text);
+
     static List<String> defaultSemanticdbCompilerOptions() {
         return Arrays.asList(
             "-P:semanticdb:synthetics:on",

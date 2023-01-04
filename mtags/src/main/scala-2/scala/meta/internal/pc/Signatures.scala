@@ -274,7 +274,7 @@ trait Signatures { compiler: MetalsGlobal =>
   ) {
     private val info: Option[SymbolDocumentation] =
       if (includeDocs) {
-        symbolDocumentation(gsym)
+        symbolDocumentation(gsym, shortenedNames.lookupSymbol)
       } else {
         None
       }

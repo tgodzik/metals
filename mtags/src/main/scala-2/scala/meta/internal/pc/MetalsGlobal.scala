@@ -18,10 +18,12 @@ import scala.tools.nsc.interactive.GlobalProxy
 import scala.tools.nsc.interactive.InteractiveAnalyzer
 import scala.tools.nsc.reporters.Reporter
 import scala.util.control.NonFatal
-import scala.{meta => m}
 
 import scala.meta.internal.jdk.CollectionConverters._
+import scala.meta.internal.metals.MetalsSymbolDocumentation
 import scala.meta.internal.mtags.MtagsEnrichments._
+import scala.meta.internal.mtags.Query
+import scala.meta.internal.mtags.QueryParser
 import scala.meta.internal.semanticdb.scalac.SemanticdbOps
 import scala.meta.pc.ParentSymbols
 import scala.meta.pc.PresentationCompilerConfig
@@ -216,11 +218,15 @@ class MetalsGlobal(
     buffer.toList
   }
 
-  def symbolDocumentation(symbol: Symbol): Option[SymbolDocumentation] = {
+  def symbolDocumentation(
+      symbol: Symbol,
+      lookupSymbol: Name => List[NameLookup]
+  ): Option[SymbolDocumentation] = {
     def toSemanticdbSymbol(sym: Symbol) = compiler.semanticdbSymbol(
       if (!sym.isJava && sym.isPrimaryConstructor) sym.owner
       else sym
     )
+
     val sym = toSemanticdbSymbol(symbol)
     val documentation = search.documentation(
       sym,
@@ -230,10 +236,69 @@ class MetalsGlobal(
       }
     )
 
-    if (documentation.isPresent) {
+    val docs = if (documentation.isPresent) {
       Some(documentation.get())
     } else {
       None
+    }
+
+    docs.map(convertDocumentationLinks(lookupSymbol))
+
+  }
+
+  private val linksRegex = raw"\[(.+)\]\((.*)\)".r
+
+  def findReplace(
+      query: Query,
+      symbol: String,
+      lookupSymbol: Name => List[NameLookup]
+  ): Option[String] = {
+    query match {
+      case Query.Id(id) =>
+        // TODO make sure it's local to the docs place
+        lookupSymbol(TermName(id)) match {
+          case LookupSucceeded(_, sym) :: _ =>
+            Some(semanticdbSymbol(sym))
+          case _ => None
+        }
+      case Query.QualifiedId(id, _, rest: Query.Id) =>
+        Some(symbol + "/" + id + "/" + rest.id + ".")
+      case Query.QualifiedId(id, _, rest) =>
+        findReplace(rest, symbol + "/" + id, lookupSymbol)
+      case _ => None
+
+    }
+  }
+
+  private def convertDocumentationLinks(
+      lookupSymbol: Name => List[NameLookup]
+  )(documentation: SymbolDocumentation): SymbolDocumentation = {
+    val newDocstring = linksRegex
+      .findAllMatchIn(documentation.docstring)
+      .foldLeft(documentation.docstring) {
+        case (acc, link)
+            if link.groupCount == 2 && link.group(1) == link.group(2) =>
+          new QueryParser(link.group(1)).tryReadQuery() match {
+            case Left(_) => acc
+            case Right(query) =>
+              findReplace(query, "", lookupSymbol) match {
+                case None => acc
+                case Some(replacement) =>
+                  acc.replace(
+                    link.matched,
+                    s"[${link.group(1)}](${metalsConfig
+                        .linkFormat(replacement.stripPrefix("/"))})"
+                  )
+              }
+          }
+
+      }
+
+    documentation match {
+      case metalsDocs: MetalsSymbolDocumentation =>
+        metalsDocs.copy(docstring = newDocstring)
+      case _ =>
+        documentation
     }
   }
 
@@ -390,15 +455,15 @@ class MetalsGlobal(
                 .take(prefix + 1)
                 .reverse
                 .map(s =>
-                  m.Term.Name(
+                  scala.meta.Term.Name(
                     history.renames
                       .get(s.companionModule)
                       .map(_.toString())
                       .getOrElse(s.nameSyntax)
                   )
                 )
-              val ref = names.tail.foldLeft(names.head: m.Term.Ref) {
-                case (qual, name) => m.Term.Select(qual, name)
+              val ref = names.tail.foldLeft(names.head: scala.meta.Term.Ref) {
+                case (qual, name) => scala.meta.Term.Select(qual, name)
               }
               new PrettyType(ref.syntax)
             }

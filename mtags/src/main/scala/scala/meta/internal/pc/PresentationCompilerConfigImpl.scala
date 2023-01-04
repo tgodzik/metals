@@ -26,8 +26,11 @@ case class PresentationCompilerConfigImpl(
     timeoutDelay: Long = 20,
     timeoutUnit: TimeUnit = TimeUnit.SECONDS,
     semanticdbCompilerOptions: util.List[String] =
-      PresentationCompilerConfig.defaultSemanticdbCompilerOptions()
+      PresentationCompilerConfig.defaultSemanticdbCompilerOptions(),
+    toCommandLink: String => String = identity
 ) extends PresentationCompilerConfig {
+
+  override def linkFormat(text: String): String = toCommandLink(text)
 
   override def isStripMarginOnTypeFormattingEnabled(): Boolean =
     _isStripMarginOnTypeFormattingEnabled()

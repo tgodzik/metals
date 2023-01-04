@@ -263,7 +263,9 @@ object ScaladocParser {
       comment: String,
       defines: collection.Map[String, String] = Map.empty
   ): Comment = {
-    parseAtSymbol(HtmlConverter.convert(expandDefines(comment, defines)))
+    parseAtSymbol(
+      HtmlConverter.convert(expandDefines(comment, defines))
+    )
   }
 
   def extractDefines(
@@ -599,7 +601,9 @@ object ScaladocParser {
           }
 
           createComment(
-            body0 = Some(parseWikiAtSymbol(docBody.toString, pos)),
+            body0 = Some(
+              parseWikiAtSymbol(docBody.toString, pos)
+            ),
             authors0 = allTags(SimpleTagKey("author")),
             see0 = allTags(SimpleTagKey("see")),
             result0 = oneTag(SimpleTagKey("return")),
@@ -1297,7 +1301,7 @@ object ScaladocParser {
 
       link match {
         case LinkPattern(link, _, _, title) =>
-          Link(link, Option(title) map (Text.apply) getOrElse Text(link))
+          Link(link, Option(title).map(Text.apply).getOrElse(Text(link)))
         case text =>
           Link(text, Text(text))
       }

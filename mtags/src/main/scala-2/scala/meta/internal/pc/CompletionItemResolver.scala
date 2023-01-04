@@ -28,15 +28,15 @@ class CompletionItemResolver(
   private def handleSymbol(item: CompletionItem, msym: String) = {
     val gsym = inverseSemanticdbSymbol(msym)
     if (gsym != NoSymbol) {
-      symbolDocumentation(gsym).orElse(
-        symbolDocumentation(gsym.companion)
+      symbolDocumentation(gsym, _ => Nil).orElse(
+        symbolDocumentation(gsym.companion, _ => Nil)
       ) match {
         case Some(info) if item.getDetail != null =>
           enrichDocs(
             item,
             info,
             metalsConfig,
-            fullDocstring(gsym),
+            fullDocstring(gsym, _ => Nil),
             isJavaSymbol(gsym)
           )
         case _ =>
@@ -47,9 +47,9 @@ class CompletionItemResolver(
     }
   }
 
-  def fullDocstring(gsym: Symbol): String = {
+  def fullDocstring(gsym: Symbol, lookup: Name => List[NameLookup]): String = {
     def docs(gsym: Symbol): String =
-      symbolDocumentation(gsym).fold("")(_.docstring())
+      symbolDocumentation(gsym, lookup).fold("")(_.docstring())
     val gsymDoc = docs(gsym)
     def keyword(gsym: Symbol): String =
       if (gsym.isClass) "class"
@@ -61,11 +61,11 @@ class CompletionItemResolver(
     if (companion == NoSymbol || isJavaSymbol(gsym)) {
       if (gsymDoc.isEmpty) {
         if (gsym.isAliasType) {
-          fullDocstring(gsym.info.dealias.typeSymbol)
+          fullDocstring(gsym.info.dealias.typeSymbol, lookup)
         } else if (gsym.isMethod) {
           gsym.info.finalResultType match {
             case SingleType(_, sym) =>
-              fullDocstring(sym)
+              fullDocstring(sym, lookup)
             case _ =>
               ""
           }

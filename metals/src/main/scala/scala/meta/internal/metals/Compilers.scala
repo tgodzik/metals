@@ -921,6 +921,14 @@ class Compilers(
     sourceMapper.pcMapping(path, scalaVersion)
   }
 
+  def convertTextToLink(sym: String): String = {
+    config
+      .commandInHtmlFormat()
+      .map(format => ServerCommands.GotoSymbol.toCommandLink(sym, format))
+      .getOrElse(sym)
+
+  }
+
   private def configure(
       pc: PresentationCompiler,
       search: SymbolSearch,
@@ -940,6 +948,7 @@ class Compilers(
               initializeParams.supportsCompletionSnippets,
             _isStripMarginOnTypeFormattingEnabled =
               () => userConfig().enableStripMarginOnTypeFormatting,
+            toCommandLink = convertTextToLink,
           )
       }
 

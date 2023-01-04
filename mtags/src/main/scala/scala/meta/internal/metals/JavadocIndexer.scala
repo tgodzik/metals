@@ -9,8 +9,7 @@ import scala.meta.inputs.Position
 import scala.meta.internal.docstrings.MarkdownGenerator
 import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.internal.mtags.JavaMtags
-import scala.meta.internal.semanticdb.Scala.Descriptor
-import scala.meta.internal.semanticdb.Scala.Symbols
+import scala.meta.internal.semanticdb.Scala._
 import scala.meta.internal.semanticdb.SymbolInformation
 import scala.meta.pc.SymbolDocumentation
 
@@ -65,9 +64,21 @@ class JavadocIndexer(
     )
   }
 
+  private def ownerClass(symbol: String, findPackage: Boolean): String = {
+    if (findPackage && symbol.endsWith("/")) symbol
+    else if (!findPackage && symbol.endsWith("#")) symbol
+    else ownerClass(symbol.owner, findPackage)
+  }
+
   def markdown(e: JavaAnnotatedElement): String = {
     val comment = Option(e.getComment).getOrElse("")
-    try MarkdownGenerator.fromDocstring(s"/**$comment\n*/", Map.empty)
+
+    pprint.log(comment)
+    try
+      MarkdownGenerator.fromDocstring(
+        s"/**$comment\n*/",
+        Map.empty
+      )
     catch {
       case NonFatal(_) =>
         // The Scaladoc parser implementation uses fragile regexp processing which
@@ -159,7 +170,9 @@ class JavadocIndexer(
   }
 }
 object JavadocIndexer {
-  def all(input: Input.VirtualFile): List[SymbolDocumentation] = {
+  def all(
+      input: Input.VirtualFile
+  ): List[SymbolDocumentation] = {
     val buf = List.newBuilder[SymbolDocumentation]
     foreach(input)(buf += _)
     buf.result()

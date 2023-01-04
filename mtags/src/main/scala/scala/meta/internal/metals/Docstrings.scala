@@ -28,7 +28,10 @@ import scala.meta.pc.SymbolDocumentation
  *
  * Handles both javadoc and scaladoc.
  */
-class Docstrings(index: GlobalSymbolIndex) {
+class Docstrings(
+    index: GlobalSymbolIndex
+) {
+
   val cache = new TrieMap[String, SymbolDocumentation]()
   private val logger = Logger.getLogger(classOf[Docstrings].getName)
 

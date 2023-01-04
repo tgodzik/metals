@@ -187,7 +187,9 @@ class HoverProvider(val compiler: MetalsGlobal, params: OffsetParams) {
       val prettySignature = printer.defaultMethodSignature(flags) + macroSuffix
       val docstring =
         if (metalsConfig.isHoverDocumentationEnabled) {
-          symbolDocumentation(symbol).fold("")(_.docstring())
+          symbolDocumentation(symbol, history.lookupSymbol).fold("")(
+            _.docstring()
+          )
         } else {
           ""
         }

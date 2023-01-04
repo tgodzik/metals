@@ -207,6 +207,7 @@ class MetalsLspService(
   private val focusedDocumentBuildTarget =
     new AtomicReference[b.BuildTargetIdentifier]()
   private val definitionIndex = newSymbolIndex()
+
   private val symbolDocs = new Docstrings(definitionIndex)
   var bspSession: Option[BspSession] =
     Option.empty[BspSession]

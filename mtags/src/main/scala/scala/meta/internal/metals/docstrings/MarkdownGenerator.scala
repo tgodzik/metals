@@ -27,7 +27,9 @@ object MarkdownGenerator {
       docstring: String,
       defines: collection.Map[String, String]
   ): String = {
-    toMarkdown(ScaladocParser.parseComment(docstring, defines))
+    toMarkdown(
+      ScaladocParser.parseComment(docstring, defines)
+    )
   }
 
   def toMarkdown(b: Body): String = {
