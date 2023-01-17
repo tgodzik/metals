@@ -131,20 +131,34 @@ class DebugProvider(
     val connectToServer = () => {
       val targets = parameters.getTargets().asScala.toSeq
 
-      compilations.compilationFinished(targets).flatMap { _ =>
-        buildServer
-          .startDebugSession(parameters)
-          .withTimeout(60, TimeUnit.SECONDS)
-          .map { uri =>
-            val socket = connect(uri)
-            connectedToServer.trySuccess(())
-            socket
-          }
-          .recover { case exception =>
-            connectedToServer.tryFailure(exception)
-            throw exception
-          }
-      }
+      def startSession(): Future[URI] =
+        compilations.compilationFinished(targets).flatMap { _ =>
+          buildServer
+            .startDebugSession(parameters)
+            .withTimeoutTry(60, TimeUnit.SECONDS) {
+              languageClient
+                .showMessageRequest(Messages.DebugTimeout.params())
+                .asScala
+                .flatMap {
+                  case Messages.DebugTimeout.wait =>
+                    startSession()
+                  case _ =>
+                    Future
+                      .failed(new Exception("Failed to start debug session"))
+                }
+            }
+        }
+      startSession()
+        .map { uri =>
+          val socket = connect(uri)
+          connectedToServer.trySuccess(())
+          socket
+        }
+        .recover { case exception =>
+          connectedToServer.tryFailure(exception)
+          throw exception
+        }
+
     }
 
     val proxyFactory = { () =>

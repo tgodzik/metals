@@ -50,6 +50,8 @@ import fansi.ErrorMode
 import io.undertow.server.HttpServerExchange
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.{lsp4j => l}
+import scala.util.Failure
+import scala.util.Success
 
 /**
  * One stop shop for all extension methods that are used in the metals build.
@@ -202,6 +204,17 @@ object MetalsEnrichments
         ec: ExecutionContext
     ): Future[A] = {
       Future(Await.result(future, FiniteDuration(length, unit)))
+    }
+
+    def withTimeoutTry(length: Int, unit: TimeUnit)(onTimeout: => Future[A])(
+        implicit ec: ExecutionContext
+    ): Future[A] = {
+      Try {
+        Await.result(future, FiniteDuration(length, unit))
+      } match {
+        case Failure(_) => onTimeout
+        case Success(value) => Future(value)
+      }
     }
 
     def onTimeout(length: Int, unit: TimeUnit)(

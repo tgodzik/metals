@@ -81,6 +81,21 @@ object Messages {
     }
   }
 
+  object DebugTimeout {
+    val wait = new MessageActionItem("wait")
+    val abort = new MessageActionItem("abort")
+
+    def params(): ShowMessageRequestParams = {
+      val params = new ShowMessageRequestParams()
+      params.setMessage(
+        "Timeout while connecting to debugger, what do you want to do."
+      )
+      params.setType(MessageType.Info)
+      params.setActions(List(wait, abort).asJava)
+      params
+    }
+  }
+
   def unableToStartServer(buildTool: String) = new MessageParams(
     MessageType.Warning,
     s"Metals is unable to start ${buildTool}. Please try to connect after starting it manually.",
