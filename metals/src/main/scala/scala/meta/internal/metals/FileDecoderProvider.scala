@@ -158,7 +158,7 @@ final class FileDecoderProvider(
             if (semanticdbExtensions.exists(uriAsStr.endsWith))
               decodeMetalsFile(jarURI)
             else
-              Future { decodeJar(jarURI) }
+              Future { decodeJar(jarURI, uriAsStr) }
           case "file" => decodeMetalsFile(uri)
           case "metalsDecode" =>
             decodedFileContents(uri.getSchemeSpecificPart())
@@ -190,12 +190,21 @@ final class FileDecoderProvider(
     new URI("jar", decoded.stripPrefix("jar:"), null)
   }
 
-  private def decodeJar(uri: URI): DecoderResponse = {
+  private def decodeJar(uri: URI, original: String): DecoderResponse = {
     Try {
       val path = uri.toAbsolutePath
       FileIO.slurp(path, StandardCharsets.UTF_8)
     } match {
-      case Failure(exception) => DecoderResponse.failed(uri, exception)
+      case Failure(_) =>
+        Try {
+          FileIO.slurp(original.toAbsolutePath, StandardCharsets.UTF_8)
+        } match {
+          case Success(value) =>
+            DecoderResponse.success(uri, value)
+          case Failure(exception) =>
+            scribe.warn(s"Unable to decode: $original", exception)
+            DecoderResponse.failed(uri, exception)
+        }
       case Success(value) => DecoderResponse.success(uri, value)
     }
   }
