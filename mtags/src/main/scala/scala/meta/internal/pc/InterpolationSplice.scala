@@ -10,7 +10,7 @@ package scala.meta.internal.pc
 case class InterpolationSplice(dollar: Int, name: String, needsBraces: Boolean)
 
 object InterpolationSplice {
-
+  val cursorSize = "CURSOR".size
   def apply(
       offset: Int,
       chars: Array[Char],
@@ -45,7 +45,7 @@ object InterpolationSplice {
           i,
           name,
           needsBraces = originalText.charAt(i + 1) == '{' ||
-            (originalText.charAt(offset) match {
+            (originalText.charAt(offset + cursorSize) match {
               case '"' => false // end of string literal
               case ch => ch.isUnicodeIdentifierPart
             })

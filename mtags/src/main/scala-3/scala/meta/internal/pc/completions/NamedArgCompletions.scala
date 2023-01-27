@@ -125,7 +125,7 @@ object NamedArgCompletions:
           ) // filter out synthesized param, like evidence
       )
 
-    val prefix = ident.map(_.name.toString).getOrElse("").stripPrefix("CURSOR")
+    val prefix = ident.map(_.name.toString).getOrElse("").stripSuffix("CURSOR")
     val params: List[Symbol] =
       allParams.filter(param => param.name.startsWith(prefix))
 

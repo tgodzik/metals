@@ -88,7 +88,14 @@ object OverrideCompletions:
     // because they are not method definitions (not starting from `def`).
     val flags = completing.map(_.flags & interestingFlags).getOrElse(EmptyFlags)
 
-    val name = completing.fold(fallbackName)(sym => Some(sym.name))
+    val name = completing
+      .fold(fallbackName)(sym => Some(sym.name))
+      .map(_.mapLast(_.dropRight(Cursor.value.length())))
+      .filter(!_.isEmpty)
+
+    def nameIsOverrideOrDef(name: Name) =
+      val strName = name.toString()
+      strName == "def" || "override".startsWith(strName) && strName.size > 2
     // not using `td.tpe.abstractTermMembers` because those members includes
     // the abstract members in `td.tpe`. For example, when we type `def foo@@`,
     // `td.tpe.abstractTermMembers` contains `method foo: <error>` and it overrides the parent `foo` method.
@@ -103,7 +110,9 @@ object OverrideCompletions:
       .collect {
         case denot
             if name
-              .fold(true)(name => denot.name.startsWith(name.show)) &&
+              .fold(true)(name =>
+                denot.name.startsWith(name.show) || nameIsOverrideOrDef(name)
+              ) &&
               !denot.symbol.isType =>
           denot.symbol
       }
@@ -531,20 +540,6 @@ object OverrideCompletions:
               None,
               t.sourcePos.start,
               true,
-              None,
-            )
-          )
-
-        // class Main extends Val:
-        //    hello@@
-        case (sel: Select) :: (t: Template) :: (td: TypeDef) :: _
-            if t.parents.nonEmpty =>
-          Some(
-            (
-              td,
-              Some(sel.symbol),
-              sel.sourcePos.start,
-              false,
               None,
             )
           )
