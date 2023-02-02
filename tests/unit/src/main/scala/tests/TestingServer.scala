@@ -1226,6 +1226,12 @@ final case class TestingServer(
     }
   }
 
+  private def semanticTokensParams(
+      filename: AbsolutePath
+  ): Future[l.SemanticTokensParams] = Future {
+    new l.SemanticTokensParams(filename.toTextDocumentIdentifier)
+  }
+
   def assertHoverAtLine(
       filename: String,
       query: String,
@@ -1350,6 +1356,27 @@ final case class TestingServer(
       highlight <- highlight(filename, query, root)
     } yield {
       Assertions.assertNoDiff(highlight, expected)
+    }
+  }
+
+  def assertSemanticTokens(
+      file: AbsolutePath,
+      code: String,
+      expected: String,
+  ): Future[Unit] = {
+    for {
+      params <- semanticTokensParams(file)
+      tokens <- server.semanticTokensFull(params).asScala
+    } yield {
+      if (tokens == null) Assertions.fail("Obtained empty tokens")
+      else {
+        val tokensList = tokens.getData().asScala.toList
+        val decoratedString = TestSemanticTokens.semanticString(
+          code,
+          tokensList.map(_.toInt),
+        )
+        Assertions.assertNoDiff(decoratedString, expected)
+      }
     }
   }
 
