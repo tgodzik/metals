@@ -40,8 +40,8 @@ class ImportMissingSymbol(compilers: Compilers, buildTargets: BuildTargets)
       codeAction
         .getEdit()
         .getChanges()
-        .getOrDefault(uri, Collections.emptyList)
         .asScala
+        .values.flatMap(_.asScala)
 
     def joinActionEdits(actions: Seq[l.CodeAction]) = {
       actions
@@ -149,7 +149,7 @@ class ImportMissingSymbol(compilers: Compilers, buildTargets: BuildTargets)
           }
           .toSeq
           .sorted
-        importMissingSymbols(deduplicated.toSeq)
+        pprint.log(importMissingSymbols(deduplicated.toSeq))
       }
   }
 
