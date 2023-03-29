@@ -274,6 +274,7 @@ final case class Indexer(
                   content: String
               ): (Input.VirtualFile, Position => Position, AdjustLspData) = {
                 val adjustLspData = AdjustedLspData.create(fromScala)
+                pprint.log(sourceItem)
                 val updatedContent =
                   sourceItem.getTopWrapper + content + sourceItem.getBottomWrapper
                 (

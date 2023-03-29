@@ -237,6 +237,8 @@ abstract class BaseScalaCliSuite(scalaVersion: String)
            |
            |pprint.log(2) // top-level statement should be fine in a script
            |
+           |args.foreach(println)
+           |
            |object MyTests extends TestSuite {
            |  pprint.log(2)
            |  val tests = Tests {
@@ -286,6 +288,12 @@ abstract class BaseScalaCliSuite(scalaVersion: String)
         "import utest.framework.{TestCallTree, Tr@@ee}",
         "utest/framework/Tree.scala",
       )
+      hover <- assertHoverAtPos(
+        "MyTests.sc",
+        9,
+        2,
+      )
+      _ = assertNoDiff(hover, "asd")
 
     } yield ()
 
