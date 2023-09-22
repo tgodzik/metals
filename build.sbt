@@ -547,6 +547,7 @@ lazy val `sbt-metals` = project
       "semanticdbVersion" -> V.semanticdb,
       "supportedScala2Versions" -> V.scala2Versions,
       "javaSemanticdbVersion" -> V.javaSemanticdb,
+      "lastSupportedSemanticdb" -> SemanticDbSupport.last,
     ),
     scalaVersion := V.scala212,
     scriptedLaunchOpts ++= Seq(s"-Dplugin.version=${version.value}"),
@@ -682,6 +683,7 @@ lazy val mtest = project
       "scalaVersion" -> scalaVersion.value,
       "kindProjector" -> V.kindProjector,
       "betterMonadicFor" -> V.betterMonadicFor,
+      "lastSupportedSemanticdb" -> SemanticDbSupport.last,
     ),
     crossScalaVersions := V.nonDeprecatedScalaVersions,
     Compile / unmanagedSourceDirectories ++= multiScalaDirectories(
