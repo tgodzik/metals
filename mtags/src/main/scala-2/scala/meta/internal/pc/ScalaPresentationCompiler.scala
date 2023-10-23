@@ -3,6 +3,7 @@ package scala.meta.internal.pc
 import java.io.File
 import java.net.URI
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.util
 import java.util.Optional
 import java.util.concurrent.CompletableFuture
@@ -12,6 +13,7 @@ import java.util.logging.Logger
 import java.{util => ju}
 
 import scala.collection.Seq
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContextExecutor
 import scala.reflect.io.VirtualDirectory
@@ -19,6 +21,7 @@ import scala.tools.nsc.Settings
 import scala.tools.nsc.reporters.StoreReporter
 
 import scala.meta.internal.jdk.CollectionConverters._
+import scala.meta.internal.metals.CompilerOffsetParams
 import scala.meta.internal.metals.CompilerVirtualFileParams
 import scala.meta.internal.metals.EmptyCancelToken
 import scala.meta.internal.metals.EmptyReportContext
@@ -37,6 +40,7 @@ import scala.meta.pc.PresentationCompiler
 import scala.meta.pc.PresentationCompilerConfig
 import scala.meta.pc.RangeParams
 import scala.meta.pc.SymbolSearch
+import scala.meta.pc.CompilerFiles
 import scala.meta.pc.VirtualFileParams
 
 import org.eclipse.lsp4j.CompletionItem
@@ -47,6 +51,9 @@ import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.SelectionRange
 import org.eclipse.lsp4j.SignatureHelp
 import org.eclipse.lsp4j.TextEdit
+import scala.util.control.NonFatal
+import scala.meta.internal.metals.Report
+import java.nio.file.Files
 
 case class ScalaPresentationCompiler(
     buildTargetIdentifier: String = "",
@@ -58,13 +65,17 @@ case class ScalaPresentationCompiler(
     sh: Option[ScheduledExecutorService] = None,
     config: PresentationCompilerConfig = PresentationCompilerConfigImpl(),
     folderPath: Option[Path] = None,
-    reportsLevel: ReportLevel = ReportLevel.Info
+    reportsLevel: ReportLevel = ReportLevel.Info,
+    compilerFiles: Option[CompilerFiles] = None
 ) extends PresentationCompiler {
+
+  private val wasCompiled = new util.concurrent.atomic.AtomicBoolean(false)
 
   implicit val executionContext: ExecutionContextExecutor = ec
 
   val scalaVersion = BuildInfo.scalaCompilerVersion
 
+  private val changedDocuments = TrieMap.empty[URI, VirtualFileParams]
   val logger: Logger =
     Logger.getLogger(classOf[ScalaPresentationCompiler].getName)
 
@@ -97,6 +108,11 @@ case class ScalaPresentationCompiler(
   ): PresentationCompiler =
     copy(sh = Some(sh))
 
+  override def withCompilerFiles(
+      compilerFiles: CompilerFiles
+  ): PresentationCompiler =
+    copy(compilerFiles = Some(compilerFiles))
+
   override def withConfiguration(
       config: PresentationCompilerConfig
   ): PresentationCompiler =
@@ -118,7 +134,43 @@ case class ScalaPresentationCompiler(
     compilerAccess.shutdown()
   }
 
-  override def restart(): Unit = {
+  override def restart(wasSuccesful: java.lang.Boolean): Unit = {
+    pprint.log(wasSuccesful)
+    compilerAccess
+      .withNonInterruptableCompiler(None)(
+        (),
+        EmptyCancelToken
+      ) { pc =>
+        if (wasSuccesful) {
+          wasCompiled.set(true)
+          changedDocuments.clear()
+        } else {
+          /* we will still want outline recompiled if the compilation was not succesful */
+          pc.compiler(Nil).richCompilationCache.foreach {
+            case (uriString, unit) =>
+              try {
+                val text = unit.source.content.mkString
+                val uri = uriString.toAbsolutePath.toURI
+                val params =
+                  CompilerOffsetParams(uri, text, 0, EmptyCancelToken)
+                changedDocuments += uri -> params
+              } catch {
+                case NonFatal(error) =>
+                  reportContex.incognito.create(
+                    Report(
+                      "restoring_cache",
+                      "Error while restoring outline compiler cache",
+                      error
+                    )
+                  )
+                  logger
+                    .log(util.logging.Level.SEVERE, error.getMessage(), error)
+              }
+          }
+        }
+      }
+      .get()
+
     compilerAccess.shutdownCurrentCompiler()
   }
 
@@ -136,13 +188,40 @@ case class ScalaPresentationCompiler(
     )
   }
 
+  private def outlineFiles(
+      current: VirtualFileParams
+  ): List[VirtualFileParams] = {
+    if (!wasCompiled.getAndSet(true)) {
+      compilerFiles.iterator.flatMap(_.allPaths().asScala).foreach { path =>
+        val uri = path.toUri()
+        if (!changedDocuments.contains(uri)) {
+          val text = Files.readString(path)
+          changedDocuments += uri -> CompilerOffsetParams(uri, text, 0)
+        }
+      }
+    }
+    val results =
+      changedDocuments.values.filterNot(_.uri() == current.uri()).toList
+    changedDocuments.clear()
+    changedDocuments += current.uri() -> current
+    results
+  }
+
   override def didChange(
       params: VirtualFileParams
   ): CompletableFuture[ju.List[Diagnostic]] = {
+    changedDocuments += params.uri() -> params
     CompletableFuture.completedFuture(Nil.asJava)
   }
 
-  def didClose(uri: URI): Unit = {}
+  def didClose(uri: URI): Unit = {
+    compilerAccess.withNonInterruptableCompiler(None)(
+      (),
+      EmptyCancelToken
+    ) { pc =>
+      pc.compiler(Nil).richCompilationCache.remove(uri.toString())
+    }
+  }
 
   override def semanticTokens(
       params: VirtualFileParams
@@ -153,7 +232,7 @@ case class ScalaPresentationCompiler(
       params.token
     ) { pc =>
       new PcSemanticTokensProvider(
-        pc.compiler(),
+        pc.compiler(outlineFiles(params)),
         params
       ).provide().asJava
     }
@@ -166,7 +245,8 @@ case class ScalaPresentationCompiler(
       EmptyCompletionList(),
       params.token
     ) { pc =>
-      new CompletionProvider(pc.compiler(), params).completions()
+      new CompletionProvider(pc.compiler(outlineFiles(params)), params)
+        .completions()
     }
 
   override def implementAbstractMembers(
@@ -177,7 +257,8 @@ case class ScalaPresentationCompiler(
       empty,
       params.token
     ) { pc =>
-      new CompletionProvider(pc.compiler(), params).implementAll()
+      new CompletionProvider(pc.compiler(outlineFiles(params)), params)
+        .implementAll()
     }
   }
 
@@ -189,7 +270,9 @@ case class ScalaPresentationCompiler(
       empty,
       params.token
     ) { pc =>
-      new InferredTypeProvider(pc.compiler(), params).inferredTypeEdits().asJava
+      new InferredTypeProvider(pc.compiler(outlineFiles(params)), params)
+        .inferredTypeEdits()
+        .asJava
     }
   }
 
@@ -199,7 +282,10 @@ case class ScalaPresentationCompiler(
     val empty: Either[String, List[TextEdit]] = Right(List())
     (compilerAccess
       .withInterruptableCompiler(Some(params))(empty, params.token) { pc =>
-        new PcInlineValueProviderImpl(pc.compiler(), params).getInlineTextEdits
+        new PcInlineValueProviderImpl(
+          pc.compiler(outlineFiles(params)),
+          params
+        ).getInlineTextEdits
       })
       .thenApply {
         case Right(edits: List[TextEdit]) => edits.asJava
@@ -215,7 +301,7 @@ case class ScalaPresentationCompiler(
     compilerAccess.withInterruptableCompiler(Some(range))(empty, range.token) {
       pc =>
         new ExtractMethodProvider(
-          pc.compiler(),
+          pc.compiler(outlineFiles(range)),
           range,
           extractionPos
         ).extractMethod.asJava
@@ -230,7 +316,7 @@ case class ScalaPresentationCompiler(
     (compilerAccess
       .withInterruptableCompiler(Some(params))(empty, params.token) { pc =>
         new ConvertToNamedArgumentsProvider(
-          pc.compiler(),
+          pc.compiler(outlineFiles(params)),
           params,
           argIndices.asScala.map(_.toInt).toSet
         ).convertToNamedArguments
@@ -250,7 +336,9 @@ case class ScalaPresentationCompiler(
       List.empty[AutoImportsResult].asJava,
       params.token
     ) { pc =>
-      new AutoImportsProvider(pc.compiler(), name, params).autoImports().asJava
+      new AutoImportsProvider(pc.compiler(outlineFiles(params)), name, params)
+        .autoImports()
+        .asJava
     }
 
   override def getTasty(
@@ -269,7 +357,7 @@ case class ScalaPresentationCompiler(
   ): CompletableFuture[CompletionItem] =
     CompletableFuture.completedFuture {
       compilerAccess.withSharedCompiler(None)(item) { pc =>
-        new CompletionItemResolver(pc.compiler()).resolve(item, symbol)
+        new CompletionItemResolver(pc.compiler(Nil)).resolve(item, symbol)
       }
     }
 
@@ -279,7 +367,10 @@ case class ScalaPresentationCompiler(
     compilerAccess.withNonInterruptableCompiler(Some(params))(
       new SignatureHelp(),
       params.token
-    ) { pc => new SignatureHelpProvider(pc.compiler()).signatureHelp(params) }
+    ) { pc =>
+      new SignatureHelpProvider(pc.compiler(outlineFiles(params)))
+        .signatureHelp(params)
+    }
 
   override def prepareRename(
       params: OffsetParams
@@ -288,7 +379,9 @@ case class ScalaPresentationCompiler(
       Optional.empty[Range](),
       params.token
     ) { pc =>
-      new PcRenameProvider(pc.compiler(), params, None).prepareRename().asJava
+      new PcRenameProvider(pc.compiler(outlineFiles(params)), params, None)
+        .prepareRename()
+        .asJava
     }
 
   override def rename(
@@ -299,7 +392,11 @@ case class ScalaPresentationCompiler(
       List[TextEdit]().asJava,
       params.token
     ) { pc =>
-      new PcRenameProvider(pc.compiler(), params, Some(name)).rename().asJava
+      new PcRenameProvider(
+        pc.compiler(outlineFiles(params)),
+        params,
+        Some(name)
+      ).rename().asJava
     }
 
   override def hover(
@@ -310,7 +407,9 @@ case class ScalaPresentationCompiler(
       params.token
     ) { pc =>
       Optional.ofNullable(
-        new HoverProvider(pc.compiler(), params).hover().orNull
+        new HoverProvider(pc.compiler(outlineFiles(params)), params)
+          .hover()
+          .orNull
       )
     }
 
@@ -318,7 +417,10 @@ case class ScalaPresentationCompiler(
     compilerAccess.withNonInterruptableCompiler(Some(params))(
       DefinitionResultImpl.empty,
       params.token
-    ) { pc => new PcDefinitionProvider(pc.compiler(), params).definition() }
+    ) { pc =>
+      new PcDefinitionProvider(pc.compiler(outlineFiles(params)), params)
+        .definition()
+    }
   }
 
   override def typeDefinition(
@@ -327,7 +429,10 @@ case class ScalaPresentationCompiler(
     compilerAccess.withNonInterruptableCompiler(Some(params))(
       DefinitionResultImpl.empty,
       params.token
-    ) { pc => new PcDefinitionProvider(pc.compiler(), params).typeDefinition() }
+    ) { pc =>
+      new PcDefinitionProvider(pc.compiler(outlineFiles(params)), params)
+        .typeDefinition()
+    }
   }
 
   override def documentHighlight(
@@ -337,7 +442,9 @@ case class ScalaPresentationCompiler(
       List.empty[DocumentHighlight].asJava,
       params.token()
     ) { pc =>
-      new PcDocumentHighlightProvider(pc.compiler(), params).highlights().asJava
+      new PcDocumentHighlightProvider(pc.compiler(outlineFiles(params)), params)
+        .highlights()
+        .asJava
     }
 
   override def semanticdbTextDocument(
@@ -350,7 +457,7 @@ case class ScalaPresentationCompiler(
       EmptyCancelToken
     ) { pc =>
       new SemanticdbTextDocumentProvider(
-        pc.compiler(),
+        pc.compiler(outlineFiles(CompilerOffsetParams(fileUri, code, 0))),
         config.semanticdbCompilerOptions().asScala.toList
       )
         .textDocument(fileUri, code)
@@ -365,7 +472,7 @@ case class ScalaPresentationCompiler(
       compilerAccess.withSharedCompiler(params.asScala.headOption)(
         List.empty[SelectionRange].asJava
       ) { pc =>
-        new SelectionRangeProvider(pc.compiler(), params)
+        new SelectionRangeProvider(pc.compiler(Nil), params)
           .selectionRange()
           .asJava
       }

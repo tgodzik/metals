@@ -8,13 +8,43 @@ import scala.meta.pc.SymbolSearchVisitor
 
 import org.eclipse.{lsp4j => l}
 
-trait WorkspaceSymbolSearch { this: MetalsGlobal =>
+trait WorkspaceSymbolSearch { compiler: MetalsGlobal =>
+
+  def searchOutline(
+      visitMember: Symbol => Boolean,
+      query: String
+  ) {
+
+    def traverseUnit(unit: RichCompilationUnit) = {
+
+      class Traverser extends compiler.Traverser {
+        override def traverse(tree: Tree): Unit = {
+          val sym = tree.symbol
+          def matches = if (sym.isType)
+            CompletionFuzzy.matchesSubCharacters(query, sym.name.toString())
+          else CompletionFuzzy.matches(query, sym.name.toString())
+          if (sym.exists && matches) { // && !sym.isStale
+            try {
+              visitMember(sym)
+            } catch {
+              case _: Throwable =>
+              // with outline compiler there might be situations when things fail
+            }
+          }
+        }
+      }
+      unit.body.traverse(new Traverser)
+    }
+    compiler.richCompilationCache.values.foreach(traverseUnit)
+  }
 
   class CompilerSearchVisitor(
       context: Context,
       visitMember: Symbol => Boolean
   ) extends SymbolSearchVisitor {
+
     def visit(top: SymbolSearchCandidate): Int = {
+
       var added = 0
       for {
         sym <- loadSymbolFromClassfile(top)
@@ -35,7 +65,7 @@ trait WorkspaceSymbolSearch { this: MetalsGlobal =>
         kind: l.SymbolKind,
         range: l.Range
     ): Int = {
-      visit(SymbolSearchCandidate.Workspace(symbol))
+      visit(SymbolSearchCandidate.Workspace(symbol, path))
     }
 
     def shouldVisitPackage(pkg: String): Boolean =
@@ -79,10 +109,14 @@ trait WorkspaceSymbolSearch { this: MetalsGlobal =>
               }
           }
           members.filter(sym => isAccessible(sym))
-        case SymbolSearchCandidate.Workspace(symbol) =>
+        case SymbolSearchCandidate.Workspace(symbol, path)
+            if !compiler.isOutlinedFile(path) =>
+          // pprint.log(path)
           val gsym = inverseSemanticdbSymbol(symbol)
           if (isAccessible(gsym)) gsym :: Nil
           else Nil
+        case _ =>
+          Nil
       }
     } catch {
       case NonFatal(_) => Nil
