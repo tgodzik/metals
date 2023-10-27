@@ -137,6 +137,7 @@ class BspConnector(
         case ResolvedMultiple(_, availableServers) =>
           val distinctServers = availableServers
             .groupBy(_.getName())
+            .view
             .mapValues {
               case singleVersion :: Nil => singleVersion
               case multipleVersions =>

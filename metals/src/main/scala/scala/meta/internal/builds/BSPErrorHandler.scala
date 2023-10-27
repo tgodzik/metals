@@ -67,7 +67,7 @@ class BspErrorHandler(
         Future.successful(dismissedErrors.add(message)).ignoreValue
       case BspErrorHandler.doNotShowErrors =>
         Future.successful {
-          tables.dismissedNotifications.BspErrors.dismissForever
+          tables.dismissedNotifications.BspErrors.dismissForever()
         }.ignoreValue
       case _ => Future.successful(())
     }

@@ -123,8 +123,8 @@ final class SyntheticsDecorationProvider(
           )
           val syntheticsAtLine = for {
             synthetic <- textDocument.synthetics
-            range <- synthetic.range.toIterable
-            currentRange <- edit.toRevisedStrict(range).toIterable
+            range <- synthetic.range.iterator
+            currentRange <- edit.toRevisedStrict(range).iterator
             lspRange = currentRange.toLsp
             if range.encloses(position, includeLastCharacter = true) ||
               !isInlineDecorationProvider // in this case we want to always show the full line
@@ -135,9 +135,9 @@ final class SyntheticsDecorationProvider(
                 userConfig(),
                 isInlineProvider = clientConfig.isInlineDecorationProvider(),
               )
-              .toIterable
+              .iterator
             if range.endLine == line
-            realRange <- edit.toRevisedStrict(range).toIterable
+            realRange <- edit.toRevisedStrict(range).iterator
             lspRealRange = realRange.toLsp
             if lspRealRange.getEnd.getLine == line
           } yield (lspRealRange, fullSnippet)
@@ -441,8 +441,8 @@ final class SyntheticsDecorationProvider(
             synthetic,
             userConfig(),
           )
-          .toIterable
-        currentRange <- edit.toRevisedStrict(range).toIterable
+          .iterator
+        currentRange <- edit.toRevisedStrict(range).iterator
         lspRange = currentRange.toLsp
       } yield decorationOptions(lspRange, decoration)
 
@@ -542,14 +542,14 @@ final class SyntheticsDecorationProvider(
     }
 
     val declarationsWithoutTypes = for {
-      tree <- trees.get(path).toIterable
+      tree <- trees.get(path).iterator
       pos <- visit(tree)
     } yield pos
 
     val allMissingTypeRanges = declarationsWithoutTypes.toSet
     val uri = path.toURI.toString
     val typeDecorations = for {
-      tree <- trees.get(path).toIterable
+      tree <- trees.get(path).iterator
       textDocumentInput = Input.VirtualFile(uri, textDocument.text)
       treeInput = Input.VirtualFile(uri, tree.pos.input.text)
       semanticDbToTreeEdit = TokenEditDistance(
@@ -563,13 +563,13 @@ final class SyntheticsDecorationProvider(
         trees,
       )
       occ <- textDocument.occurrences
-      range <- occ.range.toIterable
+      range <- occ.range.iterator
       treeRange <- semanticDbToTreeEdit
         .getOrElse(TokenEditDistance.NoMatch)
         .toRevisedStrict(range)
-        .toIterable
+        .iterator
       if occ.role.isDefinition && allMissingTypeRanges(treeRange)
-      signature <- textDocument.symbols.find(_.symbol == occ.symbol).toIterable
+      signature <- textDocument.symbols.find(_.symbol == occ.symbol).iterator
       decorationPosition = methodPositions.getOrElse(treeRange, treeRange)
       realPosition <- treeToBufferEdit.toRevisedStrict(decorationPosition)
     } yield {

@@ -163,7 +163,7 @@ commands ++= Seq(
 def lintingOptions(scalaVersion: String) = {
   val unused213 = "-Wunused"
   val unused3 = "-Wunused:all"
-  val common = List(
+  val ignores = List(
     // desugaring of for yield caused pattern var to complain
     // https://github.com/scala/bug/issues/10287
     "-Wconf:msg=in anonymous function is never used:silent",
@@ -178,10 +178,11 @@ def lintingOptions(scalaVersion: String) = {
     // silence "The outer reference in this type test cannot be checked at run time."
     "-Wconf:src=.*(CompletionProvider|ArgCompletions|Completions|Keywords|IndentOnPaste).scala&msg=The outer reference:silent",
   )
+  val common = List("-deprecation")
   crossSetting(
     scalaVersion,
-    if213 = unused213 :: common,
-    if3 = unused3 :: Nil,
+    if213 = unused213 :: ignores ::: common,
+    if3 = unused3 :: common,
     if211 = List("-Ywarn-unused-import"),
   )
 }
