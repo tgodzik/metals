@@ -3,8 +3,6 @@ package tests.pc
 import tests.BaseCompletionSuite
 
 class CompletionKeywordSuite extends BaseCompletionSuite {
-  override protected def ignoreScalaVersion: Option[IgnoreScalaVersion] =
-    Some(IgnoreForScala3CompilerPC)
 
   check(
     "super-template",

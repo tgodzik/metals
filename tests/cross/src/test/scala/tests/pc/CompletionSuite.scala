@@ -429,7 +429,7 @@ class CompletionSuite extends BaseCompletionSuite {
   )
 
   check(
-    "import-star-multi-import".tag(IgnoreForScala3CompilerPC),
+    "import-star-multi-import",
     """
       |import scala.collection.immutable.List.{range => r, *@@}
       |""".stripMargin,
@@ -2153,7 +2153,7 @@ class CompletionSuite extends BaseCompletionSuite {
   )
 
   check(
-    "multi-imports".tag(IgnoreForScala3CompilerPC),
+    "multi-imports",
     """|import scala.collection.{AbstractMap, Set@@}
        |""".stripMargin,
     """|Set scala.collection
@@ -2178,7 +2178,7 @@ class CompletionSuite extends BaseCompletionSuite {
   )
 
   check(
-    "multi-imports-empty-query".tag(IgnoreForScala3CompilerPC),
+    "multi-imports-empty-query",
     """|import scala.collection.{AbstractMap, @@}
        |""".stripMargin,
     """|+: scala.collection
@@ -2206,7 +2206,7 @@ class CompletionSuite extends BaseCompletionSuite {
   )
 
   check(
-    "import-rename".tag(IgnoreForScala3CompilerPC),
+    "import-rename",
     """|import scala.collection.{AbstractMap => Set@@}
        |""".stripMargin,
     ""
