@@ -4,6 +4,7 @@ import scala.annotation.switch
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 import scala.util.matching.Regex
+import scala.util.Try
 
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.parsers.SoftKeywords
@@ -21,7 +22,7 @@ import org.eclipse.lsp4j.SemanticTokenTypes
  */
 object SemanticTokensProvider {
 
-  def getTokens(isScala3: Boolean, text: String): Tokens = {
+  def getTokens(isScala3: Boolean, text: String): Option[Tokens] = Try {
     import scala.meta._
     if (isScala3) {
       implicit val dialect = scala.meta.dialects.Scala3
@@ -29,7 +30,7 @@ object SemanticTokensProvider {
     } else {
       text.tokenize.get
     }
-  }
+  }.toOption
 
   private def convertTokensToIntList(
       text: String,
@@ -86,21 +87,24 @@ object SemanticTokensProvider {
         scribe.warn("Could not find semantic tokens for: " + params.uri())
       List.empty[Integer]
     } else {
-      val tokens = getTokens(isScala3, params.text())
-      val buffer = ListBuffer.empty[Integer]
+      getTokens(isScala3, params.text()) match {
+        case Some(tokens) =>
+          val buffer = ListBuffer.empty[Integer]
 
-      var delta = Line(0, 0)
-      var nodesIterator: List[Node] = nodes
-      for (tk <- tokens) {
-        val (toAdd, nodesIterator0, delta0) =
-          handleToken(tk, nodesIterator, isScala3, delta)
-        nodesIterator = nodesIterator0
-        buffer.addAll(
-          toAdd
-        )
-        delta = delta0
+          var delta = Line(0, 0)
+          var nodesIterator: List[Node] = nodes
+          for (tk <- tokens) {
+            val (toAdd, nodesIterator0, delta0) =
+              handleToken(tk, nodesIterator, isScala3, delta)
+            nodesIterator = nodesIterator0
+            buffer.addAll(
+              toAdd
+            )
+            delta = delta0
+          }
+          buffer.toList
+        case None => Nil
       }
-      buffer.toList
     }
   }
 
