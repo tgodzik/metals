@@ -21,6 +21,7 @@ import dotty.tools.dotc.core.Types.*
 import dotty.tools.dotc.interactive.Interactive
 import dotty.tools.dotc.interactive.InteractiveDriver
 import dotty.tools.dotc.util.SourcePosition
+import dotty.tools.dotc.util.ParsedComment
 
 object HoverProvider:
 
@@ -132,8 +133,12 @@ object HoverProvider:
           end hoverString
 
           val docString = symbolTpes
-            .flatMap(symTpe => search.symbolDocumentation(symTpe._1))
-            .map(_.docstring)
+            .flatMap(symTpe =>
+              search
+                .symbolDocumentation(symTpe._1)
+                .map(_.docstring())
+                .orElse(ParsedComment.docOf(symTpe._1).map(_.renderAsMarkdown))
+            )
             .mkString("\n")
           printer.expressionType(exprTpw) match
             case Some(expressionType) =>
