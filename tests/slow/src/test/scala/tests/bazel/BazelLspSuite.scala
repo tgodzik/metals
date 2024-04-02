@@ -4,14 +4,20 @@ import scala.concurrent.Promise
 
 import scala.meta.internal.builds.BazelBuildTool
 import scala.meta.internal.builds.BazelDigest
+import scala.meta.internal.builds.ShellRunner
+import scala.meta.internal.metals.ClientConfiguration
 import scala.meta.internal.metals.FileDecoderProvider
 import scala.meta.internal.metals.Messages
 import scala.meta.internal.metals.Messages._
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.ServerCommands
+import scala.meta.internal.metals.StatusBar
+import scala.meta.internal.metals.Time
+import scala.meta.internal.metals.clients.language.NoopLanguageClient
 import scala.meta.internal.metals.{BuildInfo => V}
 import scala.meta.io.AbsolutePath
 
+import coursierapi.Dependency
 import org.eclipse.lsp4j.MessageActionItem
 import tests.BaseImportSuite
 import tests.BazelBuildLayout
@@ -202,6 +208,58 @@ class BazelLspSuite
         ).mkString("\n"),
       )
       assert(bazelBspConfig.exists)
+      server.assertBuildServerConnection()
+    }
+  }
+
+  test("update-bsp-config") {
+    cleanWorkspace()
+    server.client.recommendedBuildToolVersionChanged =
+      RecommendedBuildToolVersionChanged.yes
+    writeLayout(
+      BazelBuildLayout(workspaceLayout, V.bazelScalaVersion, bazelVersion)
+    )
+
+    val shellRunner = new ShellRunner(
+      NoopLanguageClient,
+      Time.system,
+      new StatusBar(
+        NoopLanguageClient,
+        Time.system,
+        clientConfig = ClientConfiguration.default,
+      ),
+    )
+
+    shellRunner.runJava(
+      Dependency.of(
+        BazelBuildTool.dependency.getModule().getOrganization(),
+        BazelBuildTool.dependency.getModule().getName(),
+        "3.1.0",
+      ),
+      BazelBuildTool.mainClass,
+      workspace,
+      BazelBuildTool.projectViewArgs(workspace),
+      javaHome = None,
+    )
+
+    for {
+      _ <- server.initialize()
+      _ <- server.initialized()
+      _ = assertNoDiff(
+        client.workspaceMessageRequests,
+        """|Recommended version of bazelbsp changed, do you wish to regenerate configuration?
+           |bazelbsp bspConfig
+           |Code navigation for Bazel projects is not supported yet.
+           |""".stripMargin,
+      )
+      // We need to wait a bit just to ensure the connection is made
+      _ <- server.server.buildServerPromise.future
+      targets <- server.listBuildTargets
+    } yield {
+      assertNoDiff(targets.mkString(", "), "@//:hello, @//:hello_lib")
+      assert(bazelBspConfig.exists)
+      val configText = bazelBspConfig.readText
+      assertContains(configText, BazelBuildTool.version)
       server.assertBuildServerConnection()
     }
   }

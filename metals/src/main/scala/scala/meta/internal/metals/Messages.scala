@@ -166,6 +166,29 @@ object Messages {
     }
   }
 
+  object RecommendedBuildToolVersionChanged {
+    def yes: MessageActionItem =
+      new MessageActionItem("Regenerate BSP config")
+
+    def notNow: MessageActionItem = Messages.notNow
+
+    def params(buildToolName: String): ShowMessageRequestParams = {
+      val params = new ShowMessageRequestParams()
+      params.setMessage(
+        s"Recommended version of $buildToolName changed, do you wish to regenerate configuration?"
+      )
+      params.setType(MessageType.Info)
+      params.setActions(
+        List(
+          yes,
+          notNow,
+          dontShowAgain,
+        ).asJava
+      )
+      params
+    }
+  }
+
   object ImportBuild {
     def yes = new MessageActionItem("Import build")
 

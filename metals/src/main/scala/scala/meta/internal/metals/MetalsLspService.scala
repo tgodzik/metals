@@ -2323,6 +2323,39 @@ class MetalsLspService(
     }
   }
 
+  private def reconnectToNewVersion(
+      session: BspSession,
+      defaultAction: BspSession => Future[BuildChange],
+  ): Future[BuildChange] = {
+    val notification = tables.dismissedNotifications.RegenerateBspConfig
+    buildTool match {
+      case Some(buildServer: BuildServerProvider)
+          if (!notification.isDismissed) =>
+        languageClient
+          .showMessageRequest(
+            Messages.RecommendedBuildToolVersionChanged
+              .params(session.main.name)
+          )
+          .asScala
+          .flatMap { item =>
+            if (item == Messages.dontShowAgain) {
+              notification.dismissForever()
+              defaultAction(session)
+            } else if (
+              item == Messages.RecommendedBuildToolVersionChanged.yes
+            ) {
+              disconnectOldBuildServer()
+                .flatMap(_ => generateBspAndConnect(buildServer))
+            } else {
+              notification.dismiss(2, TimeUnit.MINUTES)
+              defaultAction(session)
+            }
+          }
+      case _ => defaultAction(session)
+    }
+
+  }
+
   def autoConnectToBuildServer(): Future[BuildChange] = {
     def compileAllOpenFiles: BuildChange => Future[BuildChange] = {
       case change if !change.isFailed =>
@@ -2340,6 +2373,17 @@ class MetalsLspService(
 
     val scalaCliPath = scalaCli.path
 
+    def defaultConnect(session: BspSession) = {
+      val result = connectToNewBuildServer(session)
+      session.mainConnection.onReconnection { newMainConn =>
+        val updSession = session.copy(main = newMainConn)
+        connectToNewBuildServer(updSession)
+          .flatMap(compileAllOpenFiles)
+          .ignoreValue
+      }
+      result
+    }
+
     (for {
       _ <- disconnectOldBuildServer()
       maybeSession <- timerProvider.timed("Connected to build server", true) {
@@ -2350,16 +2394,21 @@ class MetalsLspService(
           shellRunner,
         )
       }
+
       result <- maybeSession match {
+        case Some(session) if buildTool.exists {
+              case recommendation: VersionRecommendation =>
+                SemVer
+                  .isLaterVersion(session.version, recommendation.version) ||
+                recommendation.version.contains(
+                  "SNAPSHOT"
+                ) && session.version != recommendation.version
+              case _ => false
+            } =>
+          reconnectToNewVersion(session, defaultConnect)
+
         case Some(session) =>
-          val result = connectToNewBuildServer(session)
-          session.mainConnection.onReconnection { newMainConn =>
-            val updSession = session.copy(main = newMainConn)
-            connectToNewBuildServer(updSession)
-              .flatMap(compileAllOpenFiles)
-              .ignoreValue
-          }
-          result
+          defaultConnect(session)
         case None =>
           Future.successful(BuildChange.None)
       }
