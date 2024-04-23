@@ -587,7 +587,7 @@ final case class TestingServer(
     )
     params.setWorkspaceFolders(
       workspaceFolders
-        .map(file => new WorkspaceFolder(toPath(file).toURI.toString))
+        .map(file => new WorkspaceFolder(toPath(file).toURI.toString, file))
         .asJava
     )
     params.setRootUri(workspace.toURI.toString)
