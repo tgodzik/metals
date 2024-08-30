@@ -6,6 +6,8 @@ import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.pc
 import scala.meta.pc.PcSymbolProperty
 import scala.meta.pc.{PcSymbolInformation => IPcSymbolInformation}
+import org.eclipse.lsp4j.Location
+import scala.meta.internal.mtags.CommonMtagsEnrichments._
 
 case class PcSymbolInformation(
     symbol: String,
@@ -18,7 +20,8 @@ case class PcSymbolInformation(
     properties: List[PcSymbolProperty],
     recursiveParents: List[String],
     annotations: List[String],
-    memberDefsAnnotations: List[String]
+    memberDefsAnnotations: List[String],
+    definition: Option[Location]
 ) {
   def asJava: PcSymbolInformationJava =
     PcSymbolInformationJava(
@@ -32,7 +35,8 @@ case class PcSymbolInformation(
       properties.asJava,
       recursiveParents.asJava,
       annotations.asJava,
-      memberDefsAnnotations.asJava
+      memberDefsAnnotations.asJava,
+      definition.asJava
     )
 }
 
@@ -47,7 +51,8 @@ case class PcSymbolInformationJava(
     properties: ju.List[PcSymbolProperty],
     override val recursiveParents: ju.List[String],
     override val annotations: ju.List[String],
-    override val memberDefsAnnotations: ju.List[String]
+    override val memberDefsAnnotations: ju.List[String],
+    override val definition: ju.Optional[Location]
 ) extends IPcSymbolInformation
 
 object PcSymbolInformation {
@@ -64,6 +69,7 @@ object PcSymbolInformation {
       info.properties().asScala.toList,
       info.recursiveParents().asScala.toList,
       info.annotations().asScala.toList,
-      info.memberDefsAnnotations().asScala.toList
+      info.memberDefsAnnotations().asScala.toList,
+      info.definition().asScala
     )
 }

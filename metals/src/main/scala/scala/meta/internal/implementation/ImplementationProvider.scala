@@ -530,6 +530,7 @@ final class ImplementationProvider(
       recursiveParents = parents,
       annotations = info.annotations.map(_.toString()).toList,
       memberDefsAnnotations = Nil,
+      definition = None,
     )
   }
 }

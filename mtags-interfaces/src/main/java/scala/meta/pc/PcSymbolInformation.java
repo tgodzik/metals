@@ -2,10 +2,12 @@ package scala.meta.pc;
 
 import java.util.List;
 import java.util.Collections;
+import org.eclipse.lsp4j.Location;
+import java.util.Optional;
 
 public interface PcSymbolInformation {
   String symbol();
-  PcSymbolKind kind();
+	Optional<Location> definition();  PcSymbolKind kind();
   List<String> parents();
   String dealiasedSymbol();
   String classOwner();

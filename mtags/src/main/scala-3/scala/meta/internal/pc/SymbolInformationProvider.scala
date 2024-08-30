@@ -15,12 +15,16 @@ import dotty.tools.dotc.core.Names
 import dotty.tools.dotc.core.Names.*
 import dotty.tools.dotc.core.StdNames.nme
 import dotty.tools.dotc.core.Symbols.*
+import scala.meta.internal.mtags.MtagsEnrichments.toLsp
+import org.eclipse.lsp4j.Location
 
 class SymbolInformationProvider(using Context):
 
   def info(symbol: String): Option[PcSymbolInformation] =
     val foundSymbols = SymbolProvider.compilerSymbols(symbol)
 
+    pprint.log(foundSymbols)
+    pprint.log(symbol)
     val (searchedSymbol, alternativeSymbols) =
       foundSymbols.partition(compilerSymbol =>
         SemanticdbSymbols.symbolName(compilerSymbol) == symbol
@@ -57,6 +61,14 @@ class SymbolInformationProvider(using Context):
         val overridden = sym.denot.allOverriddenSymbols.toList
         val memberDefAnnots = sym.info.membersBasedOnFlags(Flags.Method, Flags.EmptyFlags).flatMap(_.allSymbols).flatMap(_.denot.annotations)
 
+        val definition = if (sym.sourcePos.exists) Some(
+          Location(sym.source.file.toURL.toString(),
+            sym.sourcePos.toLsp
+          )
+          
+          ) else None
+        pprint.log(definition)
+        pprint.log(sym.sourcePos)
         val pcSymbolInformation =
           PcSymbolInformation(
             symbol = SemanticdbSymbols.symbolName(sym),
@@ -72,7 +84,8 @@ class SymbolInformationProvider(using Context):
               else Nil,
             allParents,
             sym.denot.annotations.map(_.symbol.showFullName),
-            memberDefAnnots.map(_.symbol.showFullName).toList
+            memberDefAnnots.map(_.symbol.showFullName).toList,
+            definition
           )
 
         Some(pcSymbolInformation)

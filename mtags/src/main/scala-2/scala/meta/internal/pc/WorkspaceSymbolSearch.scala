@@ -71,6 +71,15 @@ trait WorkspaceSymbolSearch { compiler: MetalsGlobal =>
         }
         val defnAnn =
           compilerSymbol.info.members.filter(_.isMethod).flatMap(_.annotations)
+        val definition =
+          if (compilerSymbol.pos.isDefined)
+            Some(
+              new l.Location(
+                compilerSymbol.sourceFile.file.toURI().toString(),
+                compilerSymbol.pos.toLsp
+              )
+            )
+          else None
         Some(
           PcSymbolInformation(
             symbol = symbol,
@@ -90,7 +99,8 @@ trait WorkspaceSymbolSearch { compiler: MetalsGlobal =>
               else Nil,
             allParents,
             compilerSymbol.annotations.map(_.toString()).distinct,
-            defnAnn.map(_.toString()).toList.distinct
+            defnAnn.map(_.toString()).toList.distinct,
+            definition
           )
         )
       case _ => None
