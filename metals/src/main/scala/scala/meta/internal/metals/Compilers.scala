@@ -558,7 +558,9 @@ class Compilers(
                   SemanticTokensProvider.provide(
                     nodes.asScala.toList,
                     vFile,
+                    path,
                     isScala3,
+                    trees,
                   )
                 } catch {
                   case NonFatal(e) =>
@@ -877,6 +879,34 @@ class Compilers(
         }
     }
   }.getOrElse(Future.successful(Nil.asJava))
+
+  def codeAction(
+      params: TextDocumentPositionParams,
+      token: CancelToken,
+      codeActionId: String,
+      codeActionPayload: Object,
+  ): Future[ju.List[TextEdit]] = {
+    withPCAndAdjustLsp(params) { (pc, pos, adjust) =>
+      pc.codeAction(
+        CompilerOffsetParamsUtils.fromPos(
+          pos,
+          token,
+          outlineFilesProvider.getOutlineFiles(pc.buildTargetId()),
+        ),
+        codeActionId,
+        codeActionPayload,
+      ).asScala
+        .map { edits =>
+          adjust.adjustTextEdits(edits)
+        }
+    }
+  }.getOrElse(Future.successful(Nil.asJava))
+
+  def supportedCodeActions(path: AbsolutePath): ju.List[String] = {
+    loadCompiler(path).map { pc =>
+      pc.supportedCodeActions()
+    }
+  }.getOrElse(Nil.asJava)
 
   def hover(
       params: HoverExtParams,

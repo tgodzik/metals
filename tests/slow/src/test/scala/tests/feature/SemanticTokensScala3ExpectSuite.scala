@@ -2,6 +2,7 @@ package tests.feature
 
 import scala.meta.internal.metals.CompilerVirtualFileParams
 import scala.meta.internal.metals.EmptyCancelToken
+import scala.meta.internal.metals.EmptyReportContext
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.SemanticTokensProvider
 import scala.meta.internal.metals.{BuildInfo => V}
@@ -9,6 +10,7 @@ import scala.meta.internal.metals.{BuildInfo => V}
 import tests.DirectoryExpectSuite
 import tests.ExpectTestCase
 import tests.InputProperties
+import tests.MetalsTestEnrichments
 import tests.TestScala3Compiler
 import tests.TestSemanticTokens
 
@@ -36,8 +38,10 @@ class SemanticTokensScala3ExpectSuite(
           val tokens = SemanticTokensProvider.provide(
             nodes,
             params,
+            file.file,
             isScala3 = true,
-          )
+            MetalsTestEnrichments.emptyTrees,
+          )(EmptyReportContext)
 
           TestSemanticTokens.semanticString(
             file.code,

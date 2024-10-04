@@ -663,13 +663,13 @@ class ProjectMetalsLspService(
               session.version,
               userConfig.bloopVersion.nonEmpty,
               old.bloopVersion.isDefined,
-              () => connect(CreateSession()),
+              () => connect(CreateSession(shutdownBuildServer = true)),
             )
             .flatMap { _ =>
               bloopServers.checkPropertiesChanged(
                 old,
                 newConfig,
-                () => connect(CreateSession()),
+                () => connect(CreateSession(shutdownBuildServer = true)),
               )
             }
             .flatMap { _ =>

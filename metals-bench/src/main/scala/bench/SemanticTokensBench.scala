@@ -2,12 +2,14 @@ package bench
 
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
 
 import scala.meta.internal.io.FileIO
 import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.internal.metals.CompilerVirtualFileParams
 import scala.meta.internal.metals.EmptyCancelToken
+import scala.meta.internal.metals.EmptyReportContext
 import scala.meta.internal.metals.ScalaVersions
 import scala.meta.internal.metals.SemanticTokensProvider
 import scala.meta.io.AbsolutePath
@@ -19,6 +21,7 @@ import org.openjdk.jmh.annotations.OutputTimeUnit
 import org.openjdk.jmh.annotations.Param
 import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.State
+import tests.MetalsTestEnrichments
 
 @State(Scope.Benchmark)
 class SemanticTokensBench extends PcBenchmark {
@@ -84,12 +87,13 @@ class SemanticTokensBench extends PcBenchmark {
 
     val nodes = pc.semanticTokens(vFile).get().asScala.toList
     val isScala3 = ScalaVersions.isScala3Version(pc.scalaVersion())
-
     SemanticTokensProvider.provide(
       nodes,
       vFile,
+      AbsolutePath(Paths.get(vFile.uri)),
       isScala3,
-    )
+      MetalsTestEnrichments.emptyTrees,
+    )(EmptyReportContext)
   }
 
   def currentHighlight: String = highlightRequests(currentHighlightRequest)

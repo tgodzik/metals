@@ -3,11 +3,16 @@ package scala.meta.internal.metals
 import scala.annotation.switch
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 import scala.util.matching.Regex
 
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.parsers.SoftKeywords
+import scala.meta.internal.parsing.Trees
 import scala.meta.internal.pc.SemanticTokens._
+import scala.meta.io.AbsolutePath
 import scala.meta.pc.Node
 import scala.meta.pc.VirtualFileParams
 import scala.meta.tokens._
@@ -23,7 +28,6 @@ object SemanticTokensProvider {
 
   def getTokens(isScala3: Boolean, text: String): Tokens = {
     import scala.meta._
-    // This should throw if something breaks since otherwise if we return empty everything will get unhighlighted
     if (isScala3) {
       implicit val dialect = scala.meta.dialects.Scala3
       text.tokenize.get
@@ -79,15 +83,37 @@ object SemanticTokensProvider {
   def provide(
       nodes: List[Node],
       params: VirtualFileParams,
+      path: AbsolutePath,
       isScala3: Boolean,
-  ): List[Integer] = {
+      trees: Trees,
+  )(implicit rc: ReportContext): List[Integer] = {
     // no semantic data was available, we can revert to default highlighting
     if (nodes.isEmpty) {
       if (params.uri().toString().isScalaFilename)
         scribe.warn("Could not find semantic tokens for: " + params.uri())
       List.empty[Integer]
     } else {
-      val tokens = getTokens(isScala3, params.text())
+      val tokens = Try(getTokens(isScala3, params.text())) match {
+        case Failure(t) =>
+          rc.unsanitized.create(
+            Report(
+              "semantic-tokens-provider",
+              params.text(),
+              s"Could not find semantic tokens for: ${params.uri()}",
+              Some(params.uri().toString()),
+              error = Some(t),
+            )
+          )
+          /* Try to get tokens from trees as a fallback to avoid
+           * things being unhighlighted too often.
+           */
+          trees
+            .get(path)
+            .map(_.tokens)
+            .getOrElse(Tokens(Array.empty))
+
+        case Success(tokens) => tokens
+      }
       val buffer = ListBuffer.empty[Integer]
 
       var delta = Line(0, 0)

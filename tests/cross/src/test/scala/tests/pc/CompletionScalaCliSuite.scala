@@ -51,19 +51,19 @@ class CompletionScalaCliSuite extends BaseCompletionSuite {
 
   check(
     "version",
-    """|//> using lib "io.circe::circe-core_sjs1:0.14.1@@"
+    """|//> using lib "io.circe::circe-core_sjs1:0.14.10@@"
        |package A
        |""".stripMargin,
-    "0.14.1"
+    "0.14.10"
   )
 
   // We don't to add `::` before version if `sjs1` is specified
   checkEdit(
     "version-edit",
-    """|//> using lib "io.circe::circe-core_sjs1:0.14.1@@"
+    """|//> using lib "io.circe::circe-core_sjs1:0.14.10@@"
        |package A
        |""".stripMargin,
-    """|//> using lib "io.circe::circe-core_sjs1:0.14.1"
+    """|//> using lib "io.circe::circe-core_sjs1:0.14.10"
        |package A
        |""".stripMargin
   )
@@ -115,7 +115,7 @@ class CompletionScalaCliSuite extends BaseCompletionSuite {
   check(
     "plugin".tag(
       IgnoreScalaVersion(version =>
-        Set("2.12.16", "2.13.14")(version) ||
+        Set("2.12.16", "2.13.15")(version) ||
           version.contains(
             "NIGHTLY"
           ) || version.contains(

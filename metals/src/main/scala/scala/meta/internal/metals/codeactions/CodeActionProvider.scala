@@ -4,6 +4,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
+import scala.meta.internal.metals.MetalsEnrichments.XtensionString
 import scala.meta.internal.metals._
 import scala.meta.internal.metals.clients.language.MetalsLanguageClient
 import scala.meta.internal.metals.codeactions.CodeAction
@@ -32,33 +33,27 @@ final class CodeActionProvider(
     new ActionableDiagnostic(),
     new StringActions(buffers),
     extractMemberAction,
-    new SourceOrganizeImports(
-      scalafixProvider,
-      buildTargets,
-      diagnostics,
-    ),
-    new OrganizeImportsQuickFix(
-      scalafixProvider,
-      buildTargets,
-      diagnostics,
-    ),
+    new SourceOrganizeImports(scalafixProvider, buildTargets, diagnostics),
+    new OrganizeImportsQuickFix(scalafixProvider, buildTargets, diagnostics),
     new InsertInferredType(trees, compilers, languageClient),
     new PatternMatchRefactor(trees),
     new RewriteBracesParensCodeAction(trees),
     new ExtractValueCodeAction(trees, buffers),
     new CreateCompanionObjectCodeAction(trees, buffers),
     new ExtractMethodCodeAction(trees, compilers, languageClient),
-    new InlineValueCodeAction(
-      trees,
-      compilers,
-      languageClient,
-    ),
+    new InlineValueCodeAction(trees, compilers, languageClient),
     new ConvertToNamedArguments(trees, compilers, languageClient),
     new FlatMapToForComprehensionCodeAction(trees, buffers),
     new MillifyDependencyCodeAction(buffers),
     new MillifyScalaCliDependencyCodeAction(buffers),
     new ConvertCommentCodeAction(buffers),
   )
+
+  def actionsForParams(params: l.CodeActionParams): List[CodeAction] = {
+    val path = params.getTextDocument.getUri.toAbsolutePath
+    val supportedCodeActions = compilers.supportedCodeActions(path)
+    allActions.filter(_.maybeCodeActionId.forall(supportedCodeActions.contains))
+  }
 
   def codeActions(
       params: l.CodeActionParams,
@@ -73,7 +68,7 @@ final class CodeActionProvider(
         case None => true
       }
 
-    val actions = allActions.collect {
+    val actions = actionsForParams(params).collect {
       case action if isRequestedKind(action) =>
         action.contribute(params, token)
     }

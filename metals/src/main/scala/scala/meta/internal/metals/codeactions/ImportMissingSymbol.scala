@@ -18,6 +18,10 @@ class ImportMissingSymbol(compilers: Compilers, buildTargets: BuildTargets)
 
   override def kind: String = l.CodeActionKind.QuickFix
 
+  override val maybeCodeActionId: Option[String] = Some(
+    "ImportMissingSymbol"
+  )
+
   override def contribute(
       params: l.CodeActionParams,
       token: CancelToken,

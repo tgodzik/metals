@@ -18,6 +18,12 @@ trait CodeAction {
    */
   def kind: String
 
+  /**
+   * The CodeActionId for this code action, if applicable. CodeActionId is only
+   * used for code actions that require the use of the presentation compiler.
+   */
+  def maybeCodeActionId: Option[String] = None
+
   type CommandData
   type ActionCommand = ParametrizedCommand[CommandData]
   def command: Option[ActionCommand] = None

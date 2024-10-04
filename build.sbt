@@ -172,37 +172,25 @@ def lintingOptions(scalaVersion: String) = {
 
 val sharedJavacOptions = List(
   Compile / javacOptions ++= {
-    if (sys.props("java.version").startsWith("1.8"))
+    if (sys.props("java.version").startsWith("17"))
       Nil
     else
-      Seq("--release", "8")
+      Seq("--release", "17")
   }
 )
 
 val sharedScalacOptions = List(
   scalacOptions ++= {
     CrossVersion.partialVersion(scalaVersion.value) match {
-      case partialVersion
-          // Scala 2.12.16 and lower break within the tests if target is set to 11
-          if isScala211(partialVersion) ||
-            scalaVersion.value == "2.12.16" ||
-            isScala212(partialVersion) && V.deprecatedScala2Versions
-              .contains(scalaVersion.value) =>
-        List(
-          "-target:jvm-1.8",
-          "-Yrangepos",
-          "-Xexperimental",
-        ) // TODO after release drop 2.11.12
-      /* Scala 2.12 has a bug on older version that break with `-release, but target
-       * is enough and we will confirm the compilation on latest Scala 2.12
-       */
-      case partialVersion
-          if isScala212(partialVersion) && V.scala212 != scalaVersion.value =>
-        List("-target:11", "-Yrangepos", "-Xexperimental")
+      //  Scala 2.12 and 2.11 cannot output for JDKs > 8
+      case partialVersion if isScala211(partialVersion) =>
+        List("-target:jvm-1.8", "-Yrangepos", "-Xexperimental")
+      case partialVersion if isScala212(partialVersion) =>
+        List("-Yrangepos", "-Xexperimental")
       case partialVersion if isScala3(partialVersion) =>
-        List("-Xtarget:11", "-language:implicitConversions", "-Xsemanticdb")
+        List("-Xtarget:17", "-language:implicitConversions", "-Xsemanticdb")
       case _ =>
-        List("-target:11", "-Yrangepos")
+        List("-target:17", "-Yrangepos")
     }
   }
 )
@@ -261,7 +249,7 @@ lazy val mtagsShared = project
     },
     libraryDependencies ++= List(
       "org.lz4" % "lz4-java" % "1.8.0",
-      "com.google.protobuf" % "protobuf-java" % "4.28.0",
+      "com.google.protobuf" % "protobuf-java" % "4.28.2",
       V.guava,
       "io.get-coursier" % "interface" % V.coursierInterfaces,
     ),
@@ -428,7 +416,7 @@ lazy val metals = project
       "io.undertow" % "undertow-core" % "2.2.20.Final",
       "org.jboss.xnio" % "xnio-nio" % "3.8.16.Final",
       // for persistent data like "dismissed notification"
-      "org.flywaydb" % "flyway-core" % "10.17.2",
+      "org.flywaydb" % "flyway-core" % "10.19.0",
       "com.h2database" % "h2" % "2.3.232",
       // for BSP
       "org.scala-sbt.ipcsocket" % "ipcsocket" % "1.6.2",
@@ -458,7 +446,7 @@ lazy val metals = project
       "com.outr" %% "scribe-file" % V.scribe,
       "com.outr" %% "scribe-slf4j2" % V.scribe, // needed for flyway database migrations
       // for JSON formatted doctor
-      "com.lihaoyi" %% "ujson" % "4.0.1",
+      "com.lihaoyi" %% "ujson" % "4.0.2",
       // For fetching projects' templates
       "com.lihaoyi" %% "requests" % "0.9.0",
       // for producing SemanticDB from Scala source files, to be sure we want the same version of scalameta

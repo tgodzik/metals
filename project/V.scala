@@ -3,8 +3,8 @@ import sbt._
 object V {
   val scala210 = "2.10.7"
   val scala211 = "2.11.12"
-  val scala212 = "2.12.19"
-  val scala213 = "2.13.14"
+  val scala212 = "2.12.20"
+  val scala213 = "2.13.15"
   val scala3 = "3.3.3"
 
   // When you can add to removedScalaVersions in MtagsResolver.scala with the last released version
@@ -16,16 +16,16 @@ object V {
   val bazelScalaVersion = "2.13.12"
   val ammonite3Version = "3.3.3"
 
-  val ammonite = "3.0.0-M2-15-9bed9700"
+  val ammonite = "3.0.0-M2-30-486378af"
   val betterMonadicFor = "0.3.1"
-  val bloop = "2.0.0"
+  val bloop = "2.0.2"
   val bloopConfig = "2.0.3"
   val bsp = "2.2.0-M2"
-  val coursier = "2.1.10"
+  val coursier = "2.1.13"
   // changing coursier interfaces version may be not binary compatible.
   // After each update of coursier interfaces, remember to bump the version in dotty repository.
-  val coursierInterfaces = "1.0.19"
-  val debugAdapter = "4.2.0"
+  val coursierInterfaces = "1.0.21"
+  val debugAdapter = "4.2.1"
   val genyVersion = "1.0.0"
   val gitter8Version = "0.16.2"
   val gradleBloop = "1.6.2"
@@ -36,8 +36,8 @@ object V {
   val lsp4jV = "0.23.1"
   val mavenBloop = "2.0.1"
   val mill = "0.11.9"
-  val mdoc = "2.5.4"
-  val munit = "1.0.1"
+  val mdoc = "2.6.1"
+  val munit = "1.0.2"
   val pprint = "0.7.3"
   val sbtBloop = bloop
   val sbtJdiTools = "1.1.1"
@@ -48,7 +48,7 @@ object V {
   val scribe = "3.15.0"
   val qdox = "2.1.0"
 
-  val guava = "com.google.guava" % "guava" % "33.3.0-jre"
+  val guava = "com.google.guava" % "guava" % "33.3.1-jre"
   val lsp4j = "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % lsp4jV
   val dap4j = "org.eclipse.lsp4j" % "org.eclipse.lsp4j.debug" % lsp4jV
 
@@ -145,12 +145,14 @@ object V {
   def nonDeprecatedScala2Versions = Seq(
     scala213,
     scala212,
+    "2.12.19",
     "2.12.18",
     "2.12.17",
     "2.12.16",
     "2.13.11",
     "2.13.12",
     "2.13.13",
+    "2.13.14",
   )
 
   def minimumSupportedSbtVersion = {
@@ -186,16 +188,15 @@ object V {
   def deprecatedScalaVersions =
     deprecatedScala2Versions ++ deprecatedScala3Versions
 
-  val quickPublishScalaVersions =
-    Set(
-      bazelScalaVersion,
-      scala211,
-      sbtScala,
-      scala212,
-      ammonite212Version,
-      scala213,
-      ammonite213Version,
-      scala3,
-      ammonite3Version,
-    ).toList ++ scala3RC.toList
+  val quickPublishScalaVersions = Set(
+    bazelScalaVersion,
+    scala211,
+    sbtScala,
+    scala212,
+    ammonite212Version,
+    scala213,
+    ammonite213Version,
+    scala3,
+    ammonite3Version,
+  ).toList ++ scala3RC.toList
 }

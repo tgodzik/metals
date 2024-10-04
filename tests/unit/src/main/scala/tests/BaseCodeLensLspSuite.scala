@@ -4,6 +4,7 @@ import scala.concurrent.Future
 
 import scala.meta.internal.builds.ShellRunner
 import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.metals.MetalsServerConfig
 
 import ch.epfl.scala.bsp4j.DebugSessionParams
 import com.google.gson.JsonObject
@@ -15,6 +16,16 @@ abstract class BaseCodeLensLspSuite(
     name: String,
     initializer: BuildServerInitializer = QuickBuildInitializer,
 ) extends BaseLspSuite(name, initializer) {
+
+  override def serverConfig: MetalsServerConfig =
+    super.serverConfig.copy(loglevel = "debug")
+
+  override def beforeEach(context: BeforeEach): Unit = {
+    super.beforeEach(context)
+    dapClient.touch()
+    dapServer.touch()
+    bspTrace.touch()
+  }
 
   protected def runFromCommand(
       cmd: Command,
@@ -106,6 +117,7 @@ abstract class BaseCodeLensLspSuite(
   def check(
       name: TestOptions,
       library: Option[String] = None,
+      plugin: Option[String] = None,
       scalaVersion: Option[String] = None,
       printCommand: Boolean = false,
       extraInitialization: (TestingServer, String) => Future[Unit] = (_, _) =>
@@ -129,13 +141,14 @@ abstract class BaseCodeLensLspSuite(
         s"a/src/main/scala/$file"
       }
 
-      val libraryString = library.map(s => s""" "$s" """).getOrElse("")
+      def wrap(dep: Option[String]) = dep.map(s => s""" "$s" """).getOrElse("")
       for {
         _ <- initialize(
           s"""|/metals.json
               |{
               |  "a": { 
-              |    "libraryDependencies" : [ $libraryString ],
+              |    "libraryDependencies" : [ ${wrap(library)} ],
+              |    "compilerPlugins" : [ ${wrap(plugin)} ],
               |    "scalaVersion": "$actualScalaVersion"
               |  }
               |}
@@ -158,6 +171,7 @@ abstract class BaseCodeLensLspSuite(
   def checkTestCases(
       name: TestOptions,
       library: Option[String] = None,
+      plugin: Option[String] = None,
       scalaVersion: Option[String] = None,
       printCommand: Boolean = false,
       minExpectedLenses: Int = 1,
@@ -166,6 +180,7 @@ abstract class BaseCodeLensLspSuite(
   )(implicit loc: Location): Unit = check(
     name,
     library,
+    plugin,
     scalaVersion,
     printCommand,
     (server, sourceFile) =>
