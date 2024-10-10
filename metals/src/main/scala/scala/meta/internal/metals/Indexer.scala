@@ -122,10 +122,9 @@ case class Indexer(indexProviders: IndexProviders)(implicit rc: ReportContext) {
         val millBuildTargetIdentifiers =
           importedBuild.workspaceBuildTargets
             .getTargets()
-            .iterator()
             .asScala
             .collect {
-              case t if t.getName().endsWith("mill-build/") =>
+              case t if t.getName().endsWith("mill-build-") =>
                 t.getId()
             }
             .toSet
@@ -138,8 +137,8 @@ case class Indexer(indexProviders: IndexProviders)(implicit rc: ReportContext) {
           sources = item.getSources().asScala
           generatedSourcesDirectory <- sources
             .find(item =>
-              item
-                .getGenerated() && item.getKind() == b.SourceItemKind.DIRECTORY
+              item.getUri.contains("generateScriptSources.dest/") && item
+                .getKind() == b.SourceItemKind.DIRECTORY
             )
             .map(_.getUri().toAbsolutePath)
         } {
@@ -190,7 +189,7 @@ case class Indexer(indexProviders: IndexProviders)(implicit rc: ReportContext) {
                         AdjustedLspData.create(fromGenerated)
                       (
                         Input.VirtualFile(
-                          generatedPath.toString,
+                          generatedPath.toString + ".scala",
                           generatedContent,
                         ),
                         toGenerated,

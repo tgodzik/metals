@@ -64,6 +64,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.{Either => JEither}
 import org.eclipse.lsp4j.{Position => LspPosition}
 import org.eclipse.lsp4j.{Range => LspRange}
 import org.eclipse.lsp4j.{debug => d}
+import scala.meta.internal.parsing.TokenOps.syntax.TokenSyntax
 
 /**
  * Manages lifecycle for presentation compilers in all build targets.
@@ -666,12 +667,18 @@ class Compilers(
         outlineFilesProvider.getOutlineFiles(pc.buildTargetId())
       val offsetParams =
         CompilerOffsetParamsUtils.fromPos(pos, token, outlineFiles)
+      pprint.log(offsetParams)
       pc.complete(offsetParams)
         .asScala
         .map { list =>
           adjust.adjustCompletionListInPlace(list)
           list
         }
+        .map { res =>
+          pprint.log(res)
+          res
+        }
+
     }.getOrElse(Future.successful(new CompletionList(Nil.asJava)))
 
   def autoImports(

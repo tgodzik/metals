@@ -533,6 +533,8 @@ class CompletionProvider(
           new DynamicFallbackCompletions(pos).print()
         case r => r
       }
+      pprint.log(typedTreeAt(pos))
+      println(unitOfFile.values.map(_.problems.toList))
       val kind = completions match {
         case _: CompletionResult.ScopeMembers =>
           CompletionListKind.Scope

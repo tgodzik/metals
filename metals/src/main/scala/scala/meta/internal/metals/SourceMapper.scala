@@ -28,9 +28,12 @@ final case class SourceMapper(
   ): (Input.VirtualFile, l.Position => l.Position, AdjustLspData) = {
 
     def input = path.toInputFromBuffers(buffers)
+    pprint.log(path)
     def default = {
+      pprint.log(buildTargets.mappedTo(path))
       val viaBuildTargets =
         buildTargets.mappedTo(path).map(_.update(input.value))
+      pprint.log(viaBuildTargets)
       viaBuildTargets.getOrElse(
         (input, identity[l.Position] _, AdjustedLspData.default)
       )

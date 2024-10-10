@@ -72,8 +72,11 @@ final class BuildTargets private (
   private def allBuildTargetIdsInternal
       : Iterator[(TargetData, BuildTargetIdentifier)] =
     data.fromIterators(d => d.allBuildTargetIds.iterator.map((d, _)))
-  def mappedTo(path: AbsolutePath): Option[TargetData.MappedSource] =
+  def mappedTo(path: AbsolutePath): Option[TargetData.MappedSource] = {
+    pprint.log(data.list.map(_.actualSources))
     data.fromOptions(_.actualSources.get(path))
+
+  }
   def mappedFrom(path: AbsolutePath): Option[AbsolutePath] =
     data.fromOptions(_.actualSources.collectFirst {
       case (source, mapped) if mapped.path == path => source
