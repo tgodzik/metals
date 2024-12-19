@@ -89,6 +89,7 @@ final class BatchedFunction[A, B](
       case None =>
       case Some(promise) =>
         promise.tryFailure(new BatchedFunction.BatchedFunctionCancelation)
+        lock.set(None)
     }
   }
 
