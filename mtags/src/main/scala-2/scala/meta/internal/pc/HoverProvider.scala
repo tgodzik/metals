@@ -10,6 +10,7 @@ import scala.meta.pc.ContentType
 import scala.meta.pc.HoverSignature
 import scala.meta.pc.OffsetParams
 import scala.meta.pc.RangeParams
+import scala.tools.nsc.reporters.StoreReporter
 
 class HoverProvider(
     val compiler: MetalsGlobal,
@@ -57,7 +58,15 @@ class HoverProvider(
       val posId =
         if (tree.pos.isDefined) tree.pos.start
         else pos.start
-
+      val potentialErrors =
+        reporter match {
+          case store: StoreReporter =>
+            store.infos.mkString("\n")
+          case other =>
+            pprint.log(other.getClass())
+        }
+      reporter.finish()
+      reporter.flush()
       Report(
         "empty-hover-scala2",
         s"""|pos: ${pos.toLsp}
@@ -65,6 +74,11 @@ class HoverProvider(
             |is error: $hasErroneousType
             |symbol: ${tree.symbol}
             |tpe: ${tree.tpe}
+            |
+            |errors:
+            |```
+            |$potentialErrors
+            |```
             |
             |tree:
             |```scala
@@ -75,6 +89,7 @@ class HoverProvider(
             |```scala
             |${unit.body}
             |```
+            |
             |""".stripMargin,
         s"empty hover in $fileName",
         id = Some(s"$fileName::$posId"),

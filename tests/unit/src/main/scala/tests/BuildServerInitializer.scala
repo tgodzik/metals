@@ -19,6 +19,7 @@ import ch.epfl.scala.bsp4j.BspConnectionDetails
 import com.google.gson.Gson
 import org.eclipse.lsp4j.InitializeResult
 import org.eclipse.lsp4j.MessageActionItem
+import scala.meta.internal.builds.ShellRunner
 
 sealed trait BuildServerInitializer {
   def initialize(
@@ -36,7 +37,6 @@ sealed trait BuildServerInitializer {
  * This will take your `metals.json` file and quickly produce `.bloop/` files from it.
  */
 object QuickBuildInitializer extends BuildServerInitializer {
-  this: BaseLspSuite =>
   override def initialize(
       workspace: AbsolutePath,
       server: TestingServer,

@@ -72,11 +72,13 @@ abstract class CompilerAccess[Reporter, Compiler](
     val compiler = _compiler
     if (compiler != null) {
       compiler.askShutdown()
+      logger.info("Shutting down compiler")
       _compiler = null
       sh.foreach { scheduler =>
         scheduler.schedule[Unit](
           () => {
             if (compiler.isAlive()) {
+              logger.info("Shutting down compiler again")
               compiler.stop()
             }
           },
