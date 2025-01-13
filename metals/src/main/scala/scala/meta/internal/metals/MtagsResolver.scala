@@ -96,6 +96,7 @@ object MtagsResolver {
     "2.13.11" -> "1.3.5",
     "3.2.2" -> "1.3.5",
     "3.3.2" -> "1.3.5",
+    "2.13.13" -> "1.4.2",
   )
 
   class Default extends MtagsResolver {
