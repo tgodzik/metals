@@ -32,6 +32,7 @@ import dotty.tools.dotc.reporting.StoreReporter
 import org.eclipse.lsp4j as l
 import org.eclipse.lsp4j.DocumentHighlight
 import org.eclipse.lsp4j.TextEdit
+import java.util as ju
 
 case class ScalaPresentationCompiler(
     buildTargetIdentifier: String = "",
@@ -213,6 +214,25 @@ case class ScalaPresentationCompiler(
         .asJava
     }(emptyQueryContext)
 
+  override def codeAction[T](
+      params: OffsetParams,
+      codeActionId: String,
+      codeActionPayload: ju.Optional[T],
+  ): CompletableFuture[ju.List[l.TextEdit]] =
+
+    val empty: ju.List[l.TextEdit] = new ju.ArrayList[l.TextEdit]()
+    compilerAccess.withInterruptableCompiler(
+      empty,
+      params.token,
+    ) { pc =>
+      codeActionId match
+        case CodeActionId.InsertInferredMethod =>
+          val provider =
+            new InferredMethodProvider(params, pc.compiler(), config, search)
+          provider.inferredMethodEdits().asJava
+    }(params.toQueryContext)
+  end codeAction
+
   def semanticdbTextDocument(
       filename: URI,
       code: String,
@@ -320,17 +340,16 @@ case class ScalaPresentationCompiler(
       extractionPos: OffsetParams,
   ): CompletableFuture[ju.List[l.TextEdit]] =
     val empty: ju.List[l.TextEdit] = new ju.ArrayList[l.TextEdit]()
-    compilerAccess.withInterruptableCompiler(empty, range.token) {
-      pc =>
-        new ExtractMethodProvider(
-          range,
-          extractionPos,
-          pc.compiler(),
-          search,
-          options.contains("-no-indent"),
-        )
-          .extractMethod()
-          .asJava
+    compilerAccess.withInterruptableCompiler(empty, range.token) { pc =>
+      new ExtractMethodProvider(
+        range,
+        extractionPos,
+        pc.compiler(),
+        search,
+        options.contains("-no-indent"),
+      )
+        .extractMethod()
+        .asJava
     }(range.toQueryContext)
   end extractMethod
 
@@ -364,7 +383,11 @@ case class ScalaPresentationCompiler(
           pc.compiler(),
           params,
         ).selectionRange().asJava
-      }(params.asScala.headOption.map(_.toQueryContext).getOrElse(emptyQueryContext))
+      }(
+        params.asScala.headOption
+          .map(_.toQueryContext)
+          .getOrElse(emptyQueryContext)
+      )
     }
   end selectionRange
 
@@ -465,8 +488,8 @@ case class ScalaPresentationCompiler(
     s"""|Scala version: $scalaVersion
         |Classpath:
         |${classpath
-          .map(path => s"$path [${if path.exists then "exists" else "missing"} ]")
-          .mkString(", ")}
+         .map(path => s"$path [${if path.exists then "exists" else "missing"} ]")
+         .mkString(", ")}
         |Options:
         |${options.mkString(" ")}
         |""".stripMargin
