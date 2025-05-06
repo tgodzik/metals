@@ -554,6 +554,7 @@ class CompletionProvider(
       }
 
       val latestParentTrees = getLastVisitedParentTrees(pos)
+      pprint.log(completions.results)
       val completion = completionPosition(
         pos,
         source,
