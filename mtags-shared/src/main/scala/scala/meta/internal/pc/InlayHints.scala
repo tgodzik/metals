@@ -16,8 +16,9 @@ import org.eclipse.{lsp4j => l}
 case class InlayHints(
     uri: URI,
     inlayHints: List[InlayHint],
+    lineSpecificInlayHints: Map[Int, InlayHint],
     definitions: Set[Int]
-) {
+) { self =>
   def containsDef(offset: Int): Boolean = definitions(offset)
   def addDefinition(offset: Int): InlayHints =
     copy(
@@ -31,6 +32,39 @@ case class InlayHints(
     copy(inlayHints =
       addInlayHint(makeInlayHint(pos.getStart(), labelParts, kind))
     )
+
+  def addLineSpecific(
+      pos: l.Range,
+      labelParts: List[LabelPart],
+      kind: InlayHintKind
+  ): InlayHints =
+    lineSpecificInlayHints
+      .get(pos.getStart.getLine)
+      .fold(
+        copy(lineSpecificInlayHints =
+          lineSpecificInlayHints + (pos.getStart.getLine -> makeInlayHint(
+            pos.getStart(),
+            labelParts,
+            kind
+          ))
+        )
+      ) { (ih: InlayHint) =>
+        if (
+          ih.getPosition().getCharacter() >= pos
+            .getStart()
+            .getCharacter()
+        ) {
+          self
+        } else {
+          copy(lineSpecificInlayHints =
+            lineSpecificInlayHints + (pos.getStart.getLine -> makeInlayHint(
+              pos.getStart(),
+              labelParts,
+              kind
+            ))
+          )
+        }
+      }
 
   private def makeInlayHint(
       pos: l.Position,
@@ -53,13 +87,15 @@ case class InlayHints(
       inlayHints.takeWhile(_.getPosition() == inlayHint.getPosition())
     (atSamePos :+ inlayHint) ++ inlayHints.drop(atSamePos.size)
   }
-  def result(): List[InlayHint] = inlayHints.reverse
+  def result(): List[InlayHint] =
+    inlayHints.reverse ++ lineSpecificInlayHints.values.toList
 
 }
 
 object InlayHints {
   private val gson = new Gson()
-  def empty(uri: URI): InlayHints = InlayHints(uri, Nil, Set.empty)
+  def empty(uri: URI): InlayHints =
+    InlayHints(uri, Nil, Map.empty[Int, InlayHint], Set.empty)
 
   /**
    * Creates a label for inlay hint by inserting `parts` on correct positions in `tpeStr`.

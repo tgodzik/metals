@@ -1,13 +1,13 @@
 package scala.meta.internal.pc
 
 import scala.annotation.tailrec
-
 import scala.meta.internal.metals.PcQueryContext
-import scala.meta.internal.mtags.MtagsEnrichments._
+import scala.meta.internal.mtags.MtagsEnrichments.*
 import scala.meta.pc.InlayHintsParams
-
 import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.InlayHintKind
+
+import scala.:+
 
 final class PcInlayHintsProvider(
     protected val compiler: MetalsGlobal,
@@ -86,6 +86,12 @@ final class PcInlayHintsProvider(
               InlayHintKind.Type
             )
             .addDefinition(adjustedPos.start)
+      case TransformationIntermediateType(tpe, pos) if tpe != null =>
+        inlayHints.addLineSpecific(
+          adjustPos(pos).focusEnd.toLsp,
+          List(LabelPart(": "), LabelPart(tpe)),
+          InlayHintKind.Type
+        )
       case _ => inlayHints
     }
 
@@ -387,6 +393,25 @@ final class PcInlayHintsProvider(
       val index = indexAfterSpacesAndComments(afterDef)
       index >= 0 && index < afterDef.size && afterDef(index) == '@'
     }
+  }
+
+  object TransformationIntermediateType {
+    def unapply(tree: Tree): Option[(String, Position)] =
+      tree match {
+        case a @ Apply(fun: Tree, ch: List[Tree])
+            if !a.symbol.isClassConstructor &&
+              !isImplicitConversion(a) &&
+              !isCompilerGeneratedSymbol(a.symbol) &&
+              (tree.symbol.isTerm) =>
+          Some((tree.symbol.owner.toString(), tree.pos))
+        case _ => None
+      }
+
+    private def isImplicitConversion(fun: Tree) =
+      fun.pos.isOffset && fun.symbol != null && fun.symbol.isImplicit
+
+    private def isCompilerGeneratedSymbol(sym: Symbol) =
+      sym.decodedName.matches("x\\$\\d+")
   }
 
   private def syntheticTupleApply(sel: Select): Boolean = {

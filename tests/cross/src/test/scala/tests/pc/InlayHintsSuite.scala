@@ -17,6 +17,44 @@ class InlayHintsSuite extends BaseInlayHintsSuite {
   }
 
   check(
+    "thingy",
+    """object Main{
+      |  trait Foo {
+      |   def bar: Bar
+      |  }
+      |
+      |  trait Bar {
+      |    def foo(): Foo
+      |  }
+      |
+      |val foo: Foo = ???
+      |
+      |val thingy: Bar = foo
+      |  .bar
+      |  .foo()
+      |  .bar
+      |}
+      |""".stripMargin,
+    """object Main{
+      |  trait Foo {
+      |   def bar: Bar
+      |  }
+      |
+      |  trait Bar {
+      |    def foo(): Foo
+      |  }
+      |
+      |val foo: Foo = ???
+      |
+      |val thingy: Bar = foo
+      |  .bar
+      |  .foo()
+      |  .bar
+      |}
+      |""".stripMargin
+  )
+
+  check(
     "local",
     """|object Main {
        |  def foo() = {
