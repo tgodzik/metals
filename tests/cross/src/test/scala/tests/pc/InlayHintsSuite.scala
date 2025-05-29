@@ -17,7 +17,7 @@ class InlayHintsSuite extends BaseInlayHintsSuite {
   }
 
   check(
-    "thingy",
+    "simple-chain",
     """object Main{
       |  trait Foo {
       |   def bar: Bar
@@ -47,9 +47,9 @@ class InlayHintsSuite extends BaseInlayHintsSuite {
       |val foo: Foo = ???
       |
       |val thingy: Bar = foo
-      |  .bar
-      |  .foo()
-      |  .bar
+      |  .bar/*: Bar<<(6:8)>>*/
+      |  .foo()/*: Foo<<(2:8)>>*/
+      |  .bar/*: Bar<<(6:8)>>*/
       |}
       |""".stripMargin
   )

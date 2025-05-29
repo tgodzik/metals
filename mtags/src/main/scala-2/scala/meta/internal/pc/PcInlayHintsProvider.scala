@@ -7,8 +7,6 @@ import scala.meta.pc.InlayHintsParams
 import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.InlayHintKind
 
-import scala.:+
-
 final class PcInlayHintsProvider(
     protected val compiler: MetalsGlobal,
     val params: InlayHintsParams
@@ -38,7 +36,7 @@ final class PcInlayHintsProvider(
   def provide(): List[InlayHint] =
     treesInRange()
       .flatMap(tpdTree =>
-        traverse(InlayHints.empty(params.uri()), tpdTree).result()
+        traverse(InlayHints.empty(params.uri()), tpdTree, None).result()
       )
 
   private def adjustPos(pos: Position): Position =
@@ -46,9 +44,10 @@ final class PcInlayHintsProvider(
 
   def collectDecorations(
       tree: Tree,
+      parent: Option[Tree],
       inlayHints: InlayHints
   ): InlayHints =
-    tree match {
+    (tree, parent) match {
       case ImplicitConversion(symbol, range) =>
         val adjusted = adjustPos(range)
         inlayHints
@@ -89,7 +88,7 @@ final class PcInlayHintsProvider(
       case TransformationIntermediateType(tpe, pos) if tpe != null =>
         inlayHints.addLineSpecific(
           adjustPos(pos).focusEnd.toLsp,
-          List(LabelPart(": "), LabelPart(tpe)),
+          LabelPart(": ") :: toLabelParts(tpe, pos),
           InlayHintKind.Type
         )
       case _ => inlayHints
@@ -97,10 +96,11 @@ final class PcInlayHintsProvider(
 
   def traverse(
       acc: InlayHints,
-      tree: Tree
+      tree: Tree,
+      parent: Option[Tree]
   ): InlayHints = {
-    val inlayHints = collectDecorations(tree, acc)
-    tree.children.foldLeft(inlayHints)(traverse(_, _))
+    val inlayHints = collectDecorations(tree, parent, acc)
+    tree.children.foldLeft(inlayHints)(traverse(_, _, Some(tree)))
   }
 
   private def partsFromType(
@@ -149,7 +149,8 @@ final class PcInlayHintsProvider(
       LabelPart(label, symbol = semanticdbSymbol(symbol))
     }
   object ImplicitConversion {
-    def unapply(tree: Tree): Option[(Symbol, Position)] =
+    def unapply(trees: (Tree, Option[Tree])): Option[(Symbol, Position)] = {
+      val (tree, _) = trees
       if (params.implicitConversions())
         tree match {
           case Apply(fun, args)
@@ -159,11 +160,13 @@ final class PcInlayHintsProvider(
           case _ => None
         }
       else None
+    }
     private def isImplicitConversion(fun: Tree) =
       fun.pos.isOffset && fun.symbol != null && fun.symbol.isImplicit
   }
   object ImplicitParameters {
-    def unapply(tree: Tree): Option[(List[Tree], Position)] =
+    def unapply(trees: (Tree, Option[Tree])): Option[(List[Tree], Position)] = {
+      val (tree, _) = trees
       if (params.implicitParameters())
         tree match {
           case implicitApply: ApplyToImplicitArgs if !tree.pos.isOffset =>
@@ -171,6 +174,7 @@ final class PcInlayHintsProvider(
           case _ => None
         }
       else None
+    }
 
     private def reversedLabelPartsFromParams(
         vparams: List[ValDef]
@@ -308,7 +312,8 @@ final class PcInlayHintsProvider(
   }
 
   object TypeParameters {
-    def unapply(tree: Tree): Option[(List[Type], Position)] =
+    def unapply(trees: (Tree, Option[Tree])): Option[(List[Type], Position)] = {
+      val (tree, _) = trees
       if (params.typeParameters())
         tree match {
           case TypeApply(sel: Select, _)
@@ -326,10 +331,12 @@ final class PcInlayHintsProvider(
           case _ => None
         }
       else None
+    }
   }
 
   object InferredType {
-    def unapply(tree: Tree): Option[(Type, Position)] =
+    def unapply(trees: (Tree, Option[Tree])): Option[(Type, Position)] = {
+      val (tree, _) = trees
       if (params.inferredTypes())
         tree match {
           case vd @ ValDef(_, _, tpt, _)
@@ -351,6 +358,7 @@ final class PcInlayHintsProvider(
           case _ => None
         }
       else None
+    }
     private def hasMissingTypeAnnot(tree: MemberDef, tpt: Tree) =
       tree.pos.isRange && tree.namePosition.isRange && tpt.pos.isOffset && tpt.pos.start != 0
 
@@ -396,22 +404,35 @@ final class PcInlayHintsProvider(
   }
 
   object TransformationIntermediateType {
-    def unapply(tree: Tree): Option[(String, Position)] =
+    def unapply(trees: (Tree, Option[Tree])): Option[(Type, Position)] = {
+      val (tree, parent) = trees
+      val isParentApply = parent match {
+        case Some(_: Apply) => true
+        case _ => false
+      }
       tree match {
-        case a @ Apply(fun: Tree, ch: List[Tree])
-            if !a.symbol.isClassConstructor &&
-              !isImplicitConversion(a) &&
-              !isCompilerGeneratedSymbol(a.symbol) &&
-              (tree.symbol.isTerm) =>
-          Some((tree.symbol.owner.toString(), tree.pos))
+        /*
+          anotherTree
+           .innerSelect()
+         */
+        case a @ Apply(innerSelect @ Select(anotherTree, _), _)
+            if !isInfix(
+              innerSelect,
+              textStr
+            ) && innerSelect.pos.isRange && innerSelect.pos.line == anotherTree.pos.line + 1 =>
+          Some((a.tpe.finalResultType, tree.pos))
+
+        /*
+          anotherTree
+           .select
+         */
+        case select @ Select(innerTree, _)
+            if innerTree.pos.isRange && select.pos.line == innerTree.pos.line + 1 && !isParentApply =>
+          Some((select.tpe.finalResultType, tree.pos))
         case _ => None
       }
+    }
 
-    private def isImplicitConversion(fun: Tree) =
-      fun.pos.isOffset && fun.symbol != null && fun.symbol.isImplicit
-
-    private def isCompilerGeneratedSymbol(sym: Symbol) =
-      sym.decodedName.matches("x\\$\\d+")
   }
 
   private def syntheticTupleApply(sel: Select): Boolean = {
