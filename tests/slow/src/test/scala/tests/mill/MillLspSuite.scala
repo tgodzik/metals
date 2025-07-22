@@ -28,7 +28,7 @@ class MillLspSuite extends BaseImportSuite("mill-import") {
            |  def scalaVersion = "${V.scala213}"
            |}
            |/.mill-version
-           |0.12.11
+           |0.12.14
         """.stripMargin
       )
       _ = assertNoDiff(
@@ -78,7 +78,7 @@ class MillLspSuite extends BaseImportSuite("mill-import") {
            |  println("sourcecode.Line(42)")
            |}
            |/.mill-version
-           |0.12.11
+           |0.12.14
            |""".stripMargin
       )
       _ <- server.didOpen("foo/src/reload/Main.scala")
@@ -87,7 +87,7 @@ class MillLspSuite extends BaseImportSuite("mill-import") {
       _ <- server.didChange("build.sc") { text =>
         text.replace(
           "/*DEPS*/",
-          "def ivyDeps = Agg(ivy\"com.lihaoyi::sourcecode::0.1.9\")",
+          "def mvnDeps = Seq(mvn\"com.lihaoyi::sourcecode::0.1.9\")",
         )
       }
       _ <- server.didSave("build.sc")
@@ -106,7 +106,9 @@ class MillLspSuite extends BaseImportSuite("mill-import") {
     cleanWorkspace()
     for {
       _ <- initialize(
-        """|/build.sc
+        """|/.mill-version
+           |0.12.14
+           |/build.sc
            |, syntax error
            |/.mill-version
            |0.12.11
@@ -143,6 +145,8 @@ class MillLspSuite extends BaseImportSuite("mill-import") {
     for {
       _ <- initialize(
         s"""
+           |/.mill-version
+           |0.12.14
            |/build.sc
            |import mill._, scalalib._
            |object foo extends ScalaModule {
