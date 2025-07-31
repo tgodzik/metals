@@ -38,12 +38,16 @@ final class Trees(
   private val trees = TrieMap.empty[AbsolutePath, Tree]
   private val tokenized = TrieMap.empty[AbsolutePath, Tokens]
 
-  def get(path: AbsolutePath): Option[Tree] =
+  def get(path: AbsolutePath): Option[Tree] = {
     trees.get(path).orElse {
-      // Fallback to parse without caching result.
-      parse(path, scalaVersionSelector.getDialect(path)).flatMap(_.toOption)
+      if (path.isTwirlTemplate) {
+        None
+      } else {
+        // Fallback to parse without caching result.
+        parse(path, scalaVersionSelector.getDialect(path)).flatMap(_.toOption)
+      }
     }
-
+  }
   def didClose(fileUri: AbsolutePath): Unit = {
     trees.remove(fileUri)
   }

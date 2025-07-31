@@ -77,7 +77,7 @@ object TwirlAdjustments {
     def mapPosition(originalPos: Position): Position = {
       val originalIndex = getIndexFromPosition(originalTwirl, originalPos)
       val mappedIndex = matrix.indexWhere { case (orig, _) =>
-        orig > originalIndex
+        orig >= originalIndex
       } match {
         case 0 => 0
         case idx if idx > 0 =>
