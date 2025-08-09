@@ -21,6 +21,7 @@ import scala.meta.internal.metals.Cancelable
 import scala.meta.internal.metals.Compilations
 import scala.meta.internal.metals.ConnectionProvider
 import scala.meta.internal.metals.Diagnostics
+import scala.meta.internal.metals.Directories
 import scala.meta.internal.metals.FormattingProvider
 import scala.meta.internal.metals.JsonParser.XtensionSerializableToJson
 import scala.meta.internal.metals.MetalsEnrichments._
@@ -130,6 +131,7 @@ class MetalsMcpServer(
     asyncServer.addTool(createListModulesTool()).subscribe()
     asyncServer.addTool(createFormatTool()).subscribe()
     asyncServer.addTool(createRunScalafixRuleTool()).subscribe()
+    asyncServer.addTool(createListScalafixRulesTool()).subscribe()
 
     // Log server initialization
     asyncServer.loggingNotification(
@@ -850,11 +852,10 @@ class MetalsMcpServer(
             )
             .toMono
         }
-      }
+      },
     )
   }
 
-  /// TODO discover old rules
   private def createRunScalafixRuleTool(): AsyncToolSpecification = {
     val schema =
       """{
@@ -921,6 +922,56 @@ class MetalsMcpServer(
             )
         }
         resultingFuture.toMono
+      },
+    )
+  }
+
+  private def createListScalafixRulesTool(): AsyncToolSpecification = {
+    val schema =
+      """{
+        |  "type": "object",
+        |  "properties": { }
+        |} 
+        |""".stripMargin
+    new AsyncToolSpecification(
+      new Tool(
+        "list-scalafix-rules",
+        "List currently available scalafix rules from .metals/rules directory. They were previously created by the `run-scalafix-rule` tool.",
+        schema,
+      ),
+      withErrorHandling { (_, _) =>
+        Future {
+          val rulesDir = projectPath.resolve(Directories.rules)
+          if (rulesDir.exists && rulesDir.isDirectory) {
+            val rules = rulesDir.list
+              .filter(_.isDirectory)
+              .map { ruleDir =>
+                val ruleName = ruleDir.filename
+                val readmeFile = ruleDir.resolve("README.md")
+                val description = if (readmeFile.exists) {
+                  Try(readmeFile.readText.trim).getOrElse(ruleName)
+                } else {
+                  ruleName
+                }
+                s"- $ruleName: $description"
+              }
+              .toSeq
+              .sorted
+
+            val content = if (rules.nonEmpty) {
+              s"Available scalafix rules:\n${rules.mkString("\n")}"
+            } else {
+              McpMessages.ListScalafixRules.noRulesFound
+            }
+
+            new CallToolResult(createContent(content), false)
+          } else {
+            new CallToolResult(
+              createContent(McpMessages.ListScalafixRules.noRulesFound),
+              false,
+            )
+          }
+        }.toMono
       },
     )
   }
@@ -1004,6 +1055,11 @@ class MetalsMcpServer(
 }
 
 object McpMessages {
+
+  object ListScalafixRules {
+    def noRulesFound: String =
+      "No scalafix rules found in .metals/rules directory"
+  }
 
   object FindDep {
     def dependencyReturnMessage(

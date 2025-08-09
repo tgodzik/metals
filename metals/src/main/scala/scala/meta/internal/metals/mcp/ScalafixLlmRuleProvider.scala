@@ -6,6 +6,7 @@ import scala.concurrent.Future
 
 import scala.meta.internal.builds.ShellRunner
 import scala.meta.internal.metals.BuildTargets
+import scala.meta.internal.metals.Directories
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.ScalaVersions
 import scala.meta.internal.metals.ScalafixProvider
@@ -25,7 +26,7 @@ class ScalafixLlmRuleProvider(
     metalsClient: MetalsLanguageClient,
     buildTargets: BuildTargets,
 )(implicit ec: ExecutionContext) {
-  private val rulesDirectory = workspace.resolve(".metals/rules")
+  private val rulesDirectory = workspace.resolve(Directories.rules)
 
   private def layout(
       ruleName: String,
@@ -68,7 +69,6 @@ class ScalafixLlmRuleProvider(
     scribe.debug(s"Wrote the rule to $rulesFile")
     rulesFile.writeText(ruleContents)
 
-    // TODO does semantic rule need a different file?
     val metadataFile =
       ruleDir.resolve(s"resources/META-INF/services/scalafix.v1.Rule")
     metadataFile.writeText(s"$ruleNameToUse")
