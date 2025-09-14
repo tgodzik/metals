@@ -487,6 +487,27 @@ class WorksheetProvider(
   def getWorksheetPCData(path: AbsolutePath): Option[WorksheetPcData] =
     worksheetPcData.get(path)
 
+  /**
+   * Evaluate a string of Scala code using the worksheet evaluation engine.
+   * This is used for evaluating comment statements that start with ">>>".
+   */
+  def evaluateString(
+      content: String,
+      path: AbsolutePath,
+      token: CancelToken,
+  ): Future[Option[EvaluatedWorksheet]] = {
+    Future {
+      try {
+        val mdoc = getMdoc(path)
+        val virtualPath = s"comment_eval_${System.currentTimeMillis()}.sc"
+        val evaluatedWorksheet = mdoc.evaluateWorksheet(virtualPath, content)
+        Some(evaluatedWorksheet)
+      } catch {
+        case _: Throwable => None
+      }
+    }
+  }
+
   private def getDependencies(
       evaluatedWorksheet: EvaluatedWorksheet
   ) =

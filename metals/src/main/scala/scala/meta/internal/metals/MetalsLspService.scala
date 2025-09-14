@@ -432,6 +432,12 @@ abstract class MetalsLspService(
     )
   )
 
+  val commentEvalProvider: CommentEvalProvider = new CommentEvalProvider(
+    trees,
+    worksheetProvider,
+    buffers,
+  )
+
   val compilers: Compilers = register(
     new Compilers(
       folder,
@@ -978,7 +984,11 @@ abstract class MetalsLspService(
           params.getTextDocument().getUri().toAbsolutePathSafe,
           token,
         )
-      } yield (hints.asScala ++ worksheet).asJava
+        commentEval <- commentEvalProvider.inlayHints(
+          params.getTextDocument().getUri().toAbsolutePathSafe,
+          token,
+        )
+      } yield (hints.asScala ++ worksheet ++ commentEval).asJava
     }
   }
 

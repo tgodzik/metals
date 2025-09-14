@@ -12,6 +12,7 @@ abstract class BaseInlayHintsLspSuite(name: String, scalaVersion: String)
       expected: String,
       config: Option[String] = None,
       dependencies: List[String] = Nil,
+      scalaVersion: String = scalaVersion,
   )(implicit
       loc: Location
   ): Unit = {
