@@ -523,7 +523,7 @@ class ReferenceLspSuite extends BaseRangesSuite("reference") {
     } yield ()
   }
 
-  test("local-3.4.x") {
+  test("local-3.4.x".tag(NonCoreTest)) {
     for {
       _ <- initialize("""
                         |/metals.json

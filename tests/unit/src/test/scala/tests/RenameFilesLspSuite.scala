@@ -330,7 +330,7 @@ class RenameFilesLspSuite extends BaseRenameFilesLspSuite("rename_files") {
   )
 
   renamed(
-    "scala3-pkg",
+    "scala3-pkg".tag(NonCoreTest),
     s"""|/$prefix/A/B/package.scala
         |<<package A:
         |  package B:>>
@@ -744,7 +744,7 @@ class RenameFilesLspSuite extends BaseRenameFilesLspSuite("rename_files") {
   )
 
   renamed(
-    "implicits-scala3",
+    "implicits-scala3".tag(NonCoreTest),
     s"""|/$prefix/A/B/Sun.scala
         |package <<A.B>>
         |
@@ -815,7 +815,7 @@ class RenameFilesLspSuite extends BaseRenameFilesLspSuite("rename_files") {
   )
 
   renamed(
-    "import-new-given",
+    "import-new-given".tag(NonCoreTest),
     s"""|/$prefix/A/B/Solaris.scala
         |package A
         |package <<B>>

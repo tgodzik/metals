@@ -21,7 +21,7 @@ class CommandSuite extends BaseSuite {
     s"""[{"uri":"$uri","range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}}}]"""
   val symbolJson: String = s"""["$symbol"]"""
 
-  test("sublime") {
+  test("sublime".tag(NonCoreTest)) {
     val format = CommandHTMLFormat.Sublime
     assertNoDiff(
       ServerCommands.GotoPosition.toCommandLink(location, format),

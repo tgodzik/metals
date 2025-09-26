@@ -12,6 +12,9 @@ import tests.BaseLspSuite
 
 class InlayHintsHoverSuite extends BaseLspSuite("implicits") {
 
+  // used for non vs code based editors
+  override def isNonCoreTestSuite = true
+
   check(
     "local",
     """|object Main {

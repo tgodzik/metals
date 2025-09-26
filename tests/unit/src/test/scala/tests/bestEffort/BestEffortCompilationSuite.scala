@@ -8,6 +8,8 @@ import tests.BaseNonCompilingLspSuite
 class BestEffortCompilationSuite
     extends BaseNonCompilingLspSuite("best-effort-compilation") {
 
+  override def isNonCoreTestSuite = true
+
   val scalaVersion = BuildInfo.latestScala3Next
 
   override def serverConfig: MetalsServerConfig =

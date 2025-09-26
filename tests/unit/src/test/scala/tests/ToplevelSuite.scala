@@ -57,4 +57,7 @@ class ToplevelsScala2Suite
       InputProperties.scala2(),
       Scala213,
       "toplevels.expect",
-    )
+    ) {
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+}

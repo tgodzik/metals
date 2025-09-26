@@ -8,6 +8,9 @@ import bill.Bill
 
 class BspSwitchLspSuite extends BaseLspSuite("bsp-switch") {
 
+  // uses sbt build server
+
+  override def isNonCoreTestSuite = true
   test("switch".flaky) {
     cleanWorkspace()
     Bill.installWorkspace(workspace)

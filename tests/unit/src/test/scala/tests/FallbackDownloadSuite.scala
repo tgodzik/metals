@@ -6,6 +6,9 @@ import coursierapi.Dependency
 
 class FallbackDownloadSuite extends BaseSuite {
 
+  // downloads dependencies on demand
+  override def isNonCoreTestSuite = true
+
   test("download-mtags") {
     val dependency = Dependency.of("org.scalameta", "mtags_2.12.18", "1.4.0")
     val results = Embedded.fallbackDownload(dependency)

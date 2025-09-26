@@ -689,7 +689,7 @@ class DefinitionLspSuite
     } yield ()
   }
 
-  test("go-to-reexported-symbol") {
+  test("go-to-reexported-symbol".tag(NonCoreTest)) {
     val testCase =
       """|package a
          |class Test extends A {

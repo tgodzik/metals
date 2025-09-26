@@ -61,6 +61,7 @@ final class TestSuitesProvider(
     extends SemanticdbFeatureProvider
     with CodeLens {
 
+  symbolIndex.definition(mtags.Symbol("scala/Option#"))
   private val index = new TestSuitesIndex
   private val junitTestFinder = new JunitTestFinder
   private val testNGTestFinder = new TestNGTestFinder

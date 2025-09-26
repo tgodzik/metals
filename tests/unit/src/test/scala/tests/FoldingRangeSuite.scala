@@ -84,11 +84,17 @@ class FoldingRangeScala3Suite
       V.scala3,
       "foldingRange-scala3",
       lineFoldingOnly = false,
-    )
+    ) {
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+}
 
 class FoldingRangeScala3LineFoldingOnlySuite
     extends FoldingRangeSuite(
       V.scala3,
       "foldingRange-scala3-foldLineOnly",
       lineFoldingOnly = true,
-    )
+    ) {
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+}

@@ -5,6 +5,9 @@ import tests.BaseRangeFormatterSuite
 class ScalaCliDependencyRangeFormatterPastingSuite
     extends BaseRangeFormatterSuite("MillifyRangeFormatting") {
 
+  // downloads scala cli on demand
+  override def isNonCoreTestSuite = true
+
   check(
     "change-dep-format-on-paste",
     s"""

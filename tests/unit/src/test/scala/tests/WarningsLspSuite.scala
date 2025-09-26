@@ -5,6 +5,9 @@ import scala.meta.internal.metals.{BuildInfo => V}
 
 class WarningsLspSuite extends BaseLspSuite("warnings") {
 
+  // depends on internet connection
+  override def isNonCoreTestSuite = true
+
   test("deprecated-scala-212") {
     cleanWorkspace()
     val deprecatedScala212Versions =

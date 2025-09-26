@@ -11,6 +11,8 @@ import tests.BaseLspSuite
 class IndentWhenPastingSuite
     extends BaseLspSuite("IndentOnPasteRangeFormatting") {
 
+  override def isNonCoreTestSuite = true
+
   protected val scalaVersion: String = BuildInfo.scala3
   val formattingOptions: FormattingOptions = new FormattingOptions(
     /** tabSize: */

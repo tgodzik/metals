@@ -200,4 +200,7 @@ class DefinitionScala3Suite
       badFileNames = List(
         "Extension.scala"
       ),
-    )
+    ) {
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+}

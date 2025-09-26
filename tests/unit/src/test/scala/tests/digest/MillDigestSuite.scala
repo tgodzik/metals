@@ -7,6 +7,7 @@ import scala.meta.io.AbsolutePath
 
 class MillDigestSuite extends BaseDigestSuite {
 
+  override def isNonCoreTestSuite = true
   override def digestCurrent(
       root: AbsolutePath
   ): Option[String] = MillDigest.current(root)

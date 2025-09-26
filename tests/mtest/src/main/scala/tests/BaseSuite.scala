@@ -42,6 +42,13 @@ abstract class BaseSuite extends munit.FunSuite with Assertions {
   def isMacOS: Boolean =
     Properties.isMac
 
+  private def coreTestsOnly: Boolean = System.getenv("CORE_TESTS_ONLY") != null
+
+  // We want to run only Scala 2 tests by default
+  def isNonCoreTestSuite: Boolean = false
+
+  val NonCoreTest = new Tag("NonCoreTest")
+
   def userHome: Path = Paths.get(System.getProperty("user.home"))
 
   def coursierCacheDir: Path =
@@ -66,6 +73,13 @@ abstract class BaseSuite extends munit.FunSuite with Assertions {
         "FlakyWindows",
         test =>
           if (test.tags(FlakyWindows) && Properties.isWin) test.tag(Flaky)
+          else test
+      ),
+      new TestTransform(
+        "IgnoreUnwanted",
+        test =>
+          if (coreTestsOnly && (test.tags(NonCoreTest) || isNonCoreTestSuite))
+            test.withTags(test.tags + munit.Ignore)
           else test
       ),
       munitFlakyTransform

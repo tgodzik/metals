@@ -13,6 +13,9 @@ import coursier.core.Organization
 
 class JarSourcesProviderSuite extends BaseSuite {
 
+  // downloads dependencies on demand
+  override def isNonCoreTestSuite = true
+
   private implicit val ctx: ExecutionContext = this.munitExecutionContext
 
   test("download-deps") {

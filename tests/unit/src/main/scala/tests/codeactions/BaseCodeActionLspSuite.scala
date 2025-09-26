@@ -100,8 +100,10 @@ abstract class BaseCodeActionLspSuite(
          |$input""".stripMargin
     }
 
+    val nameWithTag =
+      if (scalaVersion.startsWith("3.")) name.tag(NonCoreTest) else name
     checkEdit(
-      name,
+      nameWithTag,
       layout,
       expectedActions,
       expectedCode,

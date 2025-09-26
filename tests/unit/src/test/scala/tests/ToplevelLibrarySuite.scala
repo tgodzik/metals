@@ -11,6 +11,10 @@ import scala.meta.io.AbsolutePath
  * Assert the symbols emitted by ScalaToplevelMtags is a subset of ScalaMtags
  */
 class ToplevelLibrarySuite extends BaseSuite {
+
+  // downloads jars on demand
+  override def isNonCoreTestSuite = true
+
   val scala2TestClasspath: List[AbsolutePath] =
     Library.allScala2.flatMap(_.sources.entries)
 

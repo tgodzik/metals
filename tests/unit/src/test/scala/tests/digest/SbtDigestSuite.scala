@@ -6,6 +6,7 @@ import scala.meta.io.AbsolutePath
 
 class SbtDigestSuite extends BaseDigestSuite {
 
+  override def isNonCoreTestSuite = true
   override def digestCurrent(
       root: AbsolutePath
   ): Option[String] = SbtDigest.current(root)

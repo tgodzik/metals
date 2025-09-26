@@ -6,6 +6,7 @@ import scala.meta.internal.metals.SbtOpts
 import munit.Location
 
 class SbtOptsSuite extends BaseSuite {
+
   def check(name: String, original: String, expected: String)(implicit
       loc: Location
   ): Unit = {

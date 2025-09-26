@@ -40,4 +40,7 @@ class ToplevelWithInnerScala3Suite
       InputProperties.scala3(),
       "toplevel-with-inner-scala3",
       dialects.Scala3,
-    )
+    ) {
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+}

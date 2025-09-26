@@ -16,6 +16,9 @@ abstract class BaseWorksheetLspSuite(
     scalaVersion: String
 ) extends BaseLspSuite(s"worksheet") {
 
+  // uses Scala 3
+  override def isNonCoreTestSuite = scalaVersion.startsWith("3.")
+
   override protected def initializationOptions: Option[InitializationOptions] =
     Some(
       InitializationOptions.Default.copy(

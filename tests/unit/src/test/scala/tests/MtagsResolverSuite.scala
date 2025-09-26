@@ -8,6 +8,10 @@ import scala.concurrent.ExecutionContextExecutorService
 import scala.meta.internal.metals.MtagsResolver
 
 class MtagsResolverSuite extends BaseSuite {
+
+  // Downloads dependencies on demand
+  override def isNonCoreTestSuite = true
+
   implicit val ex: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
 

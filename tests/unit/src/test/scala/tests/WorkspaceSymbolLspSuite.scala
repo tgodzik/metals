@@ -401,7 +401,7 @@ class WorkspaceSymbolLspSuite extends BaseLspSuite("workspace-symbol") {
     } yield ()
   }
 
-  test("extension-symbol") {
+  test("extension-symbol".tag(NonCoreTest)) {
     cleanWorkspace()
     for {
       _ <- initialize(

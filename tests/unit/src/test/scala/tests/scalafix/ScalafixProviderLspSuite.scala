@@ -15,6 +15,9 @@ import tests.BaseLspSuite
 
 class ScalafixProviderLspSuite extends BaseLspSuite("scalafix-provider") {
 
+  // downloads scalafix on demand
+  override def isNonCoreTestSuite = true
+
   def scalafixConf(path: String = "/.scalafix.conf"): String =
     s"""|$path
         |rules = [

@@ -467,8 +467,10 @@ class ExtractRenameMemberLspSuite
       codeActionExpected: Boolean = true,
       scalaVersion: String = V.scala213,
       fileName: String = "A.scala",
-  )(implicit loc: munit.Location): Unit =
-    test(name) {
+  )(implicit loc: munit.Location): Unit = {
+    val nameWithTag =
+      if (scalaVersion.startsWith("3.")) name.tag(NonCoreTest) else name
+    test(nameWithTag) {
       val (buffers, trees) = TreeUtils.getTrees(scalaVersion)
       val filename = fileName
       val path = AbsolutePath(Paths.get(filename))
@@ -503,7 +505,7 @@ class ExtractRenameMemberLspSuite
         }
       } yield ()
     }
-
+  }
   // Same structure of path as in function `check`
   private def testedFilePath(name: String) = s"a/src/main/scala/a/$name"
 }

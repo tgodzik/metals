@@ -53,4 +53,7 @@ class SemanticdbScala2Suite
  * - topelevel symbols https://github.com/lampepfl/dotty/issues/11693
  */
 class SemanticdbScala3Suite
-    extends SemanticdbSuite(InputProperties.scala3(), "semanticdb-scala3")
+    extends SemanticdbSuite(InputProperties.scala3(), "semanticdb-scala3") {
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+}

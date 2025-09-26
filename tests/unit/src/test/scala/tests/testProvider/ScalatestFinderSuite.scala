@@ -8,13 +8,13 @@ import scala.meta.internal.metals.testProvider.frameworks.ScalatestStyle
 import scala.meta.internal.metals.testProvider.frameworks.ScalatestTestFinder
 import scala.meta.io.AbsolutePath
 
-import munit.FunSuite
 import munit.Location
 import munit.TestOptions
 import tests.QuickRange
 import tests.TreeUtils
+import tests.BaseSuite
 
-class ScalatestFinderSuite extends FunSuite {
+class ScalatestFinderSuite extends BaseSuite {
 
   check(
     "any-fun-suite",
@@ -386,8 +386,10 @@ class ScalatestFinderSuite extends FunSuite {
       expected: Set[(String, QuickRange)],
       style: ScalatestStyle,
       scalaVersion: String = BuildInfo.scala213,
-  )(implicit loc: Location): Unit =
-    test(name) {
+  )(implicit loc: Location): Unit = {
+    val nameWithTag =
+      if (scalaVersion.startsWith("3.")) name.tag(NonCoreTest) else name
+    test(nameWithTag) {
       val filename = "TestFile.scala"
       val path = AbsolutePath(Paths.get(filename))
 
@@ -407,5 +409,6 @@ class ScalatestFinderSuite extends FunSuite {
 
       assertEquals(obtained, expected0)
     }
+  }
 
 }

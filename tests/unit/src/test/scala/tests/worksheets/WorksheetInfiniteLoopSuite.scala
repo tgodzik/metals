@@ -11,6 +11,9 @@ import tests.BaseLspSuite
 class WorksheetInfiniteLoopSuite
     extends BaseLspSuite("worksheet-infinite-loop") {
 
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+
   override protected def initializationOptions: Option[InitializationOptions] =
     Some(
       InitializationOptions.Default.copy(

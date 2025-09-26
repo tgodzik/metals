@@ -331,7 +331,7 @@ class NewFileLspSuite extends BaseLspSuite("new-file") {
     expectedException = List(classOf[FileAlreadyExistsException]),
   )
 
-  checkScala("scala3-enum")(
+  checkScala("scala3-enum".tag(NonCoreTest))(
     directory = Some("a/src/main/scala/foo"),
     fileType = Right(Enum),
     fileName = Right("Color"),

@@ -15,6 +15,9 @@ class RemovedScalaLspSuite extends BaseLspSuite("cascade") {
 
   override protected def mtagsResolver: MtagsResolver = MtagsResolver.default()
 
+  // downloads dependencies on demand
+  override def isNonCoreTestSuite = true
+
   test("versions-should-be-added") {
     check(firstSupported = "2.12.9", lastSupported = V.scala212)
     check(firstSupported = "2.13.1", lastSupported = V.scala213)

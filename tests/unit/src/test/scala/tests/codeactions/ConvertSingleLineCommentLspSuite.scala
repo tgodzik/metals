@@ -235,7 +235,8 @@ class ConvertSingleLineCommentLspSuite
   )
 
   check(
-    "should not consume scala-cli directives when expanding comment cluster",
+    "should not consume scala-cli directives when expanding comment cluster"
+      .tag(NonCoreTest),
     """//> using scala 3.3.1
       |//<<>>my class
       |class A
@@ -265,7 +266,9 @@ class ConvertSingleLineCommentLspSuite
   )
 
   checkNoAction(
-    "should not show action when a comment is scala-cli directive",
+    "should not show action when a comment is scala-cli directive".tag(
+      NonCoreTest
+    ),
     """|//> <<>>using scala 3.3.3
        |val b = 2""".stripMargin,
     fileName = "script2.sc",

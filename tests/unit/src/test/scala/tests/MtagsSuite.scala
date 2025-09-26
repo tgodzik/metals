@@ -89,4 +89,7 @@ class MtagsScala3Suite
       // Do not assert unknown symbols and compare to semanticdb,
       // There're still lot to improve in mtags for Scala3
       ignoreUnknownSymbols = true,
-    )
+    ) {
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+}

@@ -1015,7 +1015,7 @@ class DebugDiscoverySuite
     )
   }
 
-  test("run-closest-scala3-main-annotation") {
+  test("run-closest-scala3-main-annotation".tag(NonCoreTest)) {
     val fileContent =
       """|package a
          |

@@ -6,6 +6,9 @@ import scala.meta.internal.metals.{BuildInfo => V}
 
 class AutoImportLspSuite extends BaseCompletionLspSuite("auto-import") {
 
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+
   check(
     "basic",
     """|package a

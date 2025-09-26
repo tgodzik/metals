@@ -68,4 +68,7 @@ class DocumentSymbolScala3Suite
       "documentSymbol-scala3",
       InputProperties.scala3(),
       V.scala3,
-    )
+    ) {
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+}

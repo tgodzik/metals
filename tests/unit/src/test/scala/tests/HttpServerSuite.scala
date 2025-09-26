@@ -7,6 +7,10 @@ import scala.meta.internal.metals.Cancelable
 import scala.meta.internal.metals.MetalsHttpServer
 
 class HttpServerSuite extends BaseSuite {
+
+  // Only for other clients
+  override def isNonCoreTestSuite = true
+
   test("freePort") {
     val host = "127.0.0.1"
     val sockets = 1.to(3).map { _ =>

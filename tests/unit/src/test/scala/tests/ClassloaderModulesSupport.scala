@@ -6,6 +6,9 @@ class ClassloaderModulesSupport
     extends BaseLspSuite("classloader-modules-")
     with TestHovers {
 
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+
   test("basic") {
     cleanWorkspace()
     for {

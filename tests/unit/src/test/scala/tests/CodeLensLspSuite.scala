@@ -51,7 +51,7 @@ class CodeLensLspSuite extends BaseCodeLensLspSuite("codeLenses") {
   )
 
   check(
-    "custom-main",
+    "custom-main".tag(NonCoreTest),
     library = Some("io.github.dfianthdl::dfhdl:0.7.1"),
     plugin = Some("io.github.dfianthdl:::dfhdl-plugin:0.7.1"),
     scalaVersion = Some("3.5.0"),

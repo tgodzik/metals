@@ -30,14 +30,17 @@ import ch.epfl.scala.bsp4j.BuildTargetIdentifier
 import ch.epfl.scala.bsp4j.ScalaBuildTarget
 import ch.epfl.scala.bsp4j.ScalaPlatform
 import ch.epfl.scala.bsp4j.ScalacOptionsItem
-import munit.FunSuite
 import munit.Location
 import munit.TestOptions
+import tests.BaseSuite
 import tests.TestMtagsResolver
 
-class ProblemResolverSuite extends FunSuite {
+class ProblemResolverSuite extends BaseSuite {
 
   implicit val ctx: ExecutionContext = this.munitExecutionContext
+
+  // checks available versions online
+  override def isNonCoreTestSuite = true
 
   checkRecommendation(
     "unsupported-scala-version",

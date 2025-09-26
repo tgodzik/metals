@@ -37,7 +37,7 @@ class HoverLspSuite extends BaseLspSuite("hover-") with TestHovers {
     } yield ()
   }
 
-  test("basic - Scala 3.5.0".tag(FlakyWindows)) {
+  test("basic - Scala 3.5.0".tag(FlakyWindows).tag(NonCoreTest)) {
     for {
       _ <- initialize(
         """/metals.json

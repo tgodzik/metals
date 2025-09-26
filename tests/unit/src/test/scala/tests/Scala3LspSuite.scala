@@ -4,6 +4,9 @@ import tests.BaseLspSuite
 
 class Scala3LspSuite extends BaseLspSuite("scala3") {
 
+  // uses Scala 3
+  override def isNonCoreTestSuite = true
+
   test("import-capture") {
     for {
       _ <- initialize(
