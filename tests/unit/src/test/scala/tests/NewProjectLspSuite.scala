@@ -26,6 +26,8 @@ import org.eclipse.lsp4j.ShowMessageRequestParams
 
 class NewProjectLspSuite extends BaseLspSuite("new-project") {
 
+  override def isNonCoreTestSuite = true
+
   override protected def initializationOptions: Option[InitializationOptions] =
     Some(
       InitializationOptions.Default
@@ -187,7 +189,7 @@ class NewProjectLspSuite extends BaseLspSuite("new-project") {
   private def check(testName: TestOptions)(
       pickedProject: Option[String],
       name: Option[String],
-      expectedContent: String,
+      expectedContent: => String,
       customTemplate: Option[String] = None,
       templateFromg8Site: Option[String] = None,
   )(implicit loc: Location): Unit =
