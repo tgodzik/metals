@@ -10,6 +10,8 @@ import coursierapi.Repository
 
 class GradleRepositoriesTest extends BaseSuite {
 
+  override def isNonCoreTestSuite: Boolean = true
+
   check(
     Nil,
     """|  repositories {
