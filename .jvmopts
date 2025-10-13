@@ -3,3 +3,7 @@
 -XX:ReservedCodeCacheSize=1024m
 -XX:+TieredCompilation
 -Dfile.encoding=UTF-8
+-Dsbt.coursier.home=metals-cache/coursier
+-Dcoursier.cache=metals-cache/coursier
+-Dsbt.boot.directory=metals-cache/sbt/boot
+-Dsbt.ivy.home=metals-cache/.ivy2
