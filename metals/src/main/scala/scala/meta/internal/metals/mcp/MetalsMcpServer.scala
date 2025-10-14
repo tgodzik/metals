@@ -38,14 +38,18 @@ import ch.epfl.scala.bsp4j.StatusCode
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.modelcontextprotocol.server.McpAsyncServerExchange
 import io.modelcontextprotocol.server.McpServer
+import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceSpecification
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
 import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult
 import io.modelcontextprotocol.spec.McpSchema.Content
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification
+import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult
+import io.modelcontextprotocol.spec.McpSchema.Resource
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities
 import io.modelcontextprotocol.spec.McpSchema.TextContent
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents
 import io.modelcontextprotocol.spec.McpSchema.Tool
 import io.undertow.Undertow
 import io.undertow.servlet.Servlets
@@ -104,6 +108,7 @@ class MetalsMcpServer(
     val capabilities = ServerCapabilities
       .builder()
       .tools(true) // Tool support with list changes notifications
+      .resources(true, false) // Resource support
       .logging() // Enable logging support (enabled by default with logging level INFO)
       .build();
 
@@ -133,6 +138,9 @@ class MetalsMcpServer(
     asyncServer.addTool(createGenerateScalafixRuleTool()).subscribe()
     asyncServer.addTool(createRunScalafixRuleTool()).subscribe()
     asyncServer.addTool(createListScalafixRulesTool()).subscribe()
+
+    // Register resources
+    asyncServer.addResource(createScalafixContextResource()).subscribe()
 
     // Log server initialization
     asyncServer.loggingNotification(
@@ -1090,7 +1098,7 @@ class MetalsMcpServer(
       """{
         |  "type": "object",
         |  "properties": { }
-        |} 
+        |}
         |""".stripMargin
     new AsyncToolSpecification(
       new Tool(
@@ -1112,6 +1120,75 @@ class MetalsMcpServer(
             false,
           )
         }.toMono
+      },
+    )
+  }
+
+  private def createScalafixContextResource(): AsyncResourceSpecification = {
+    val uri = "context://scalafix"
+    val resource = Resource.builder
+      .uri(uri)
+      .name(
+        "Scalafix Context"
+      )
+      .description(
+        "Guide for writing custom Scalafix rules with examples and best practices"
+      )
+      .mimeType(
+        "text/markdown"
+      )
+      .build()
+
+    new AsyncResourceSpecification(
+      resource,
+      (exchange, request) => {
+        try {
+          val resourceStream = getClass.getResourceAsStream(
+            "/contexts/scalafix.md"
+          )
+          if (resourceStream == null) {
+            Mono.just(
+              new ReadResourceResult(
+                Arrays.asList(
+                  new TextResourceContents(
+                    uri,
+                    "text/markdown",
+                    "Error: Scalafix context resource not found",
+                  )
+                )
+              )
+            )
+          } else {
+            val content = scala.io.Source
+              .fromInputStream(resourceStream, "UTF-8")
+              .mkString
+            resourceStream.close()
+
+            Mono.just(
+              new ReadResourceResult(
+                Arrays.asList(
+                  new TextResourceContents(uri, "text/markdown", content)
+                )
+              )
+            )
+          }
+        } catch {
+          case NonFatal(e) =>
+            scribe.warn(
+              s"Error reading scalafix context resource: ${e.getMessage}"
+            )
+            Mono.just(
+              new ReadResourceResult(
+                Arrays.asList(
+                  new TextResourceContents(
+                    uri,
+                    "text/markdown",
+                    s"Error reading resource: ${e.getMessage}",
+                  )
+                )
+              )
+            )
+        }
       },
     )
   }

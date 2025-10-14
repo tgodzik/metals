@@ -427,6 +427,30 @@ class McpServerLspSuite extends BaseLspSuite("mcp-server") with McpTestUtils {
     } yield ()
   }
 
+  test("query-resource") {
+    cleanWorkspace()
+    for {
+      _ <- initialize(
+        s"""
+           |/metals.json
+           |{"a": {}}
+           |/a/src/main/scala/com/example/Hello.scala
+           |package com.example
+           |
+           |object Hello { }
+           |""".stripMargin
+      )
+      _ <- server.didOpen("a/src/main/scala/com/example/Hello.scala")
+      client <- startMcpServer()
+      result <- client.queryResource("context://scalafix")
+      _ = assertContains(
+        result,
+        "Writing Custom Scalafix Rules",
+      )
+      _ <- client.shutdown()
+    } yield ()
+  }
+
   override def afterEach(context: AfterEach): Unit = {
     super.afterEach(context)
     assertEquals(

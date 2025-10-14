@@ -15,6 +15,8 @@ import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult
 import io.modelcontextprotocol.spec.McpSchema.TextContent
+import io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents
 
 class TestMcpClient(url: String, val port: Int)(implicit ec: ExecutionContext) {
   private val objectMapper = new ObjectMapper()
@@ -135,4 +137,24 @@ class TestMcpClient(url: String, val port: Int)(implicit ec: ExecutionContext) {
     params.put("symbolType", symbolTypes)
     callTool("typed-glob-search", params).map(_.mkString)
   }
+
+  def queryResource(
+      uri: String
+  ): Future[String] = {
+    val callToolRequest =
+      new ReadResourceRequest(uri)
+    client
+      .readResource(callToolRequest)
+      .toFuture()
+      .toScala
+      .map(result =>
+        result.contents.asScala
+          .collect { case text: TextResourceContents =>
+            text.text()
+          }
+          .toList
+          .mkString
+      )
+  }
+
 }
