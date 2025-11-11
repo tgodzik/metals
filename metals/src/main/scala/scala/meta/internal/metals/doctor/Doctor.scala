@@ -47,6 +47,7 @@ import scala.meta.io.AbsolutePath
 
 import ch.epfl.scala.bsp4j.BuildTargetIdentifier
 import org.eclipse.{lsp4j => l}
+import scala.meta.internal.bsp.RegenerateBspConfig
 
 /**
  * Helps the user figure out what is mis-configured in the build through the "Run doctor" command.
@@ -120,13 +121,26 @@ final class Doctor(
           import scala.meta.internal.metals.Messages.CheckDoctor
           val params = CheckDoctor.params(problem)
           hasProblems.set(true)
-          languageClient.showMessageRequest(params).asScala.foreach { item =>
-            if (item == CheckDoctor.moreInformation) {
-              headDoctor.executeRunDoctor()
-            } else if (item == CheckDoctor.dismissForever) {
-              notification.dismissForever()
+          languageClient
+            .showMessageRequest(
+              params,
+              defaultTo = () => {
+                languageClient.showMessage(
+                  new l.MessageParams(
+                    l.MessageType.Warning,
+                    problem + "\n Take a look at the doctor for more information.",
+                  )
+                )
+                CheckDoctor.dismissForever
+              },
+            )
+            .foreach { item =>
+              if (item == CheckDoctor.moreInformation) {
+                headDoctor.executeRunDoctor()
+              } else if (item == CheckDoctor.dismissForever) {
+                notification.dismissForever()
+              }
             }
-          }
         }
       case None =>
         () // All OK.
@@ -198,6 +212,11 @@ final class Doctor(
               case ResolvedMultiple(_, _) =>
                 (
                   "Multiple build servers found for your workspace. Attempt to connect to choose your desired server.",
+                  false,
+                )
+              case RegenerateBspConfig =>
+                (
+                  "Build server configuration is regenerating. Please wait for it to complete.",
                   false,
                 )
             }

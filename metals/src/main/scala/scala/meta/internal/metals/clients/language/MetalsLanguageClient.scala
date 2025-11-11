@@ -3,16 +3,22 @@ package scala.meta.internal.metals.clients.language
 import java.util.concurrent.CompletableFuture
 import javax.annotation.Nullable
 
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
 import scala.util.Try
 
 import scala.meta.internal.metals.Icons
+import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.tvp._
 
 import org.eclipse.lsp4j.ExecuteCommandParams
+import org.eclipse.lsp4j.MessageActionItem
 import org.eclipse.lsp4j.MessageParams
 import org.eclipse.lsp4j.MessageType
 import org.eclipse.lsp4j.ProgressParams
+import org.eclipse.lsp4j.ShowMessageRequestParams
 import org.eclipse.lsp4j.WorkDoneProgressCreateParams
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import org.eclipse.lsp4j.services.LanguageClient
@@ -42,6 +48,16 @@ trait MetalsLanguageClient extends LanguageClient with TreeViewClient {
   private[clients] def rawMetalsInputBox(
       params: MetalsInputBoxParams
   ): CompletableFuture[RawMetalsInputBoxResult]
+
+  def showMessageRequest(
+      params: ShowMessageRequestParams,
+      defaultTo: () => MessageActionItem,
+  )(implicit ec: ExecutionContext): Future[MessageActionItem] = {
+    showMessageRequest(params).asScala.recoverWith {
+      case _: ResponseErrorException =>
+        Future.successful(defaultTo())
+    }
+  }
 
   /**
    * Opens an input box to ask the user for input.
