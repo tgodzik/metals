@@ -449,6 +449,19 @@ object Embedded {
       Some(scalaVersion),
     )
 
+  def downloadScalafix(scalaVersion: String): List[Path] =
+    downloadDependency(
+      scalafixDependency(scalaVersion),
+      Some(scalaVersion),
+    )
+
+  private def scalafixDependency(scalaVersion: String): Dependency =
+    dependencyOf(
+      "ch.epfl.scala",
+      s"scalafix-cli_$scalaVersion",
+      BuildInfo.scalafixVersion,
+    )
+
   def downloadSemanticdbJavac: List[Path] = {
     downloadDependency(
       dependencyOf(

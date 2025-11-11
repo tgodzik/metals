@@ -225,20 +225,7 @@ object DownloadDependencies {
       .map(_.split('.').take(2).mkString("."))
       .distinct
       .filter(_ != "2.11")
-    allToDownload.flatMap(downloadScalafix)
-  }
-
-  def downloadScalafix(scalaMinorVersion: String): Array[Path] = {
-    scribe.info(s"Downloading Scalafix for $scalaMinorVersion")
-    Scalafix
-      .fetchAndClassloadInstance(scalaMinorVersion)
-      .getClass()
-      .getClassLoader() match {
-      case cl: java.net.URLClassLoader =>
-        cl.getURLs().map(_.toURI()).map(Paths.get(_))
-      case cl =>
-        throw new Exception(s"Unexpected classloader: $cl")
-    }
+    allToDownload.flatMap(Embedded.downloadScalafix)
   }
 
   def downloadBloop(): Seq[Path] = {
