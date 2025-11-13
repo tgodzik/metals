@@ -1,5 +1,6 @@
 package scala.meta.internal.pc
 
+import java.nio.file.Path
 import javax.lang.model.`type`.ArrayType
 import javax.lang.model.`type`.DeclaredType
 import javax.lang.model.`type`.TypeVariable
@@ -9,29 +10,35 @@ import javax.lang.model.element.ExecutableElement
 import javax.lang.model.element.Modifier
 import javax.lang.model.element.TypeElement
 import javax.lang.model.element.VariableElement
+import javax.lang.model.util.Elements
 
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 
 import scala.meta.pc.OffsetParams
+import scala.meta.pc.SymbolSearchVisitor
 
 import com.sun.source.tree.ClassTree
 import com.sun.source.tree.CompilationUnitTree
 import com.sun.source.tree.MemberSelectTree
 import com.sun.source.tree.MethodTree
-import com.sun.source.tree.Tree.Kind._
+import com.sun.source.tree.Tree.Kind
 import com.sun.source.util.JavacTask
 import com.sun.source.util.TreePath
 import com.sun.source.util.Trees
+import org.eclipse.lsp4j
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
 import org.eclipse.lsp4j.CompletionList
 import org.eclipse.lsp4j.InsertTextFormat
+import org.eclipse.lsp4j.SymbolKind
+import scala.collection.mutable.ListBuffer
 
 class JavaCompletionProvider(
     compiler: JavaMetalsGlobal,
     params: OffsetParams,
-    isCompletionSnippetsEnabled: Boolean
+    isCompletionSnippetsEnabled: Boolean,
+    buildTargetIdentifier: String
 ) {
 
   lazy val identifier = extractIdentifier.toLowerCase
@@ -48,6 +55,7 @@ class JavaCompletionProvider(
       else params.text()
     val task: JavacTask =
       compiler.compilationTask(textWithSemicolon, params.uri())
+
     val scanner = JavaMetalsGlobal.scanner(task)
     val position =
       CursorPosition(params.offset(), params.offset(), params.offset())
@@ -55,9 +63,34 @@ class JavaCompletionProvider(
 
     node match {
       case Some(n) =>
+        val trees = Trees.instance(task)
+        // TODO make sure proper newlines are always added and that we add at the bottom
+        val importPosition = n
+          .iterator()
+          .asScala
+          .dropWhile { tree =>
+            tree.getKind() != Kind.PACKAGE
+          }
+          .toList
+          .headOption match {
+          case Some(value) =>
+            val sourcePositions = trees.getSourcePositions()
+            val end = sourcePositions.getEndPosition(scanner.root, value)
+            val pos = compiler.offsetToPosition(end.toInt, params.text())
+            new lsp4j.Range(pos, pos)
+          case None =>
+            new lsp4j.Range(new lsp4j.Position(0, 0), new lsp4j.Position(0, 0))
+        }
         val items = n.getLeaf.getKind match {
-          case MEMBER_SELECT => completeMemberSelect(task, n).distinct
-          case IDENTIFIER => completeIdentifier(task, n).distinct ++ keywords(n)
+          case Kind.MEMBER_SELECT =>
+            completeMemberSelect(task, n, trees, importPosition).distinct
+          case Kind.IDENTIFIER =>
+            completeFromScope(
+              task,
+              n,
+              trees,
+              importPosition
+            ).distinct ++ keywords(n)
           case _ => keywords(n)
         }
         new CompletionList(items.asJava)
@@ -83,14 +116,14 @@ class JavaCompletionProvider(
 
   private def completeMemberSelect(
       task: JavacTask,
-      path: TreePath
+      path: TreePath,
+      trees: Trees,
+      importPosition: lsp4j.Range
   ): List[CompletionItem] = {
     val typeAnalyzer = new JavaTypeAnalyzer(task)
     val select = path.getLeaf.asInstanceOf[MemberSelectTree]
     val newPath = new TreePath(path, select.getExpression)
     val memberType = typeAnalyzer.typeMirror(newPath)
-
-    val trees = Trees.instance(task)
     val exprElem = trees.getElement(newPath)
 
     val isStaticContext =
@@ -102,38 +135,50 @@ class JavaCompletionProvider(
       })
 
     memberType match {
-      case dt: DeclaredType => completeDeclaredType(task, dt, isStaticContext)
+      case dt: DeclaredType =>
+        completeDeclaredType(task, dt, importPosition, isStaticContext)
       case _: ArrayType => completeArrayType()
-      case tv: TypeVariable => completeTypeVariable(task, tv)
+      case tv: TypeVariable => completeTypeVariable(task, tv, importPosition)
       case _ => Nil
     }
   }
 
-  private def completeIdentifier(
-      task: JavacTask,
-      path: TreePath
-  ): List[CompletionItem] =
-    completeFromScope(task, path)
-
   private def completeFromScope(
       task: JavacTask,
-      path: TreePath
+      path: TreePath,
+      trees: Trees,
+      importPosition: lsp4j.Range
   ): List[CompletionItem] = {
-    val trees = Trees.instance(task)
     val scope = trees.getScope(path)
 
-    val scopeCompletion = JavaScopeVisitor.scopeMembers(task, scope)
+    val scopeCompletion =
+      JavaScopeVisitor.scopeMembers(task, scope).map(SimpleElement.apply)
+
     val identifier = extractIdentifier
 
-    scopeCompletion
-      .sortBy(el => identifierScore(el))
-      .map(completionItem)
+    val importableElements = ListBuffer.empty[ImportableElement]
+
+    val visitor = new JavaClassVisitor(
+      task.getElements(),
+      element => {
+        importableElements.addOne(ImportableElement(element))
+        true
+      }
+    )
+    compiler.search.search(identifier, buildTargetIdentifier, visitor)
+    val all: List[ScopeElement] =
+      (scopeCompletion ++ importableElements.toList)
+    all
+      .distinctBy(_.element)
+      .sortBy(el => identifierScore(el.element))
+      .map(el => completionItem(el, importPosition))
       .filter(item => CompletionFuzzy.matches(identifier, item.getLabel))
   }
 
   private def completeDeclaredType(
       task: JavacTask,
       declaredType: DeclaredType,
+      importPosition: lsp4j.Range,
       isStaticContext: Boolean = false
   ): List[CompletionItem] = {
     // constructors cannot be invoked as members
@@ -147,24 +192,37 @@ class JavaCompletionProvider(
       .getAllMembers(declaredElement.asInstanceOf[TypeElement])
       .asScala
       .toList
+      .map(SimpleElement.apply)
 
     val identifier = extractIdentifier
 
-    val completionItems = members
+    val importableElements = ListBuffer.empty[ImportableElement]
+    val visitor = new JavaClassVisitor(
+      task.getElements(),
+      element => {
+        importableElements.addOne(ImportableElement(element))
+        true
+      }
+    )
+    compiler.search.search(identifier, buildTargetIdentifier, visitor)
+    val all: List[ScopeElement] =
+      (members ++ importableElements.toList)
+    val completionItems = all
       .filter { member =>
         val isMatches = CompletionFuzzy.matches(
           identifier,
-          member.getSimpleName.toString
+          member.element.getSimpleName.toString
         )
-        val isAllowedKind = !bannedKinds(member.getKind())
-        val isStaticMember = member.getModifiers.contains(Modifier.STATIC)
+        val isAllowedKind = !bannedKinds(member.element.getKind())
+        val isStaticMember =
+          member.element.getModifiers.contains(Modifier.STATIC)
 
         isMatches && isAllowedKind && (isStaticMember || !isStaticContext)
       }
       .sortBy { element =>
-        memberScore(element, declaredElement)
+        memberScore(element.element, declaredElement)
       }
-      .map(completionItem)
+      .map(el => completionItem(el, importPosition))
     completionItems
   }
 
@@ -224,11 +282,12 @@ class JavaCompletionProvider(
   @tailrec
   private def completeTypeVariable(
       task: JavacTask,
-      typeVariable: TypeVariable
+      typeVariable: TypeVariable,
+      importPosition: lsp4j.Range
   ): List[CompletionItem] = {
     typeVariable.getUpperBound match {
-      case dt: DeclaredType => completeDeclaredType(task, dt)
-      case tv: TypeVariable => completeTypeVariable(task, tv)
+      case dt: DeclaredType => completeDeclaredType(task, dt, importPosition)
+      case tv: TypeVariable => completeTypeVariable(task, tv, importPosition)
       case _ => Nil
     }
   }
@@ -241,7 +300,11 @@ class JavaCompletionProvider(
     i + 1
   }
 
-  private def completionItem(element: Element): CompletionItem = {
+  private def completionItem(
+      scopeElement: ScopeElement,
+      importPosition: lsp4j.Range
+  ): CompletionItem = {
+    val element = scopeElement.element
     val simpleName = element.getSimpleName.toString
 
     val (label, insertText) = element match {
@@ -253,12 +316,26 @@ class JavaCompletionProvider(
       case _ => (simpleName, simpleName)
     }
 
+    val importStatement = scopeElement match {
+      case SimpleElement(element) => Nil
+      case ImportableElement(element) =>
+        val toImport = element.getEnclosingElement.toString()
+        List(
+          new lsp4j.TextEdit(
+            importPosition,
+            s"\nimport $toImport.${scopeElement.element.getSimpleName()};"
+          )
+        )
+
+    }
+
     val item = new CompletionItem(label)
 
     if (isCompletionSnippetsEnabled)
       item.setInsertTextFormat(InsertTextFormat.Snippet)
 
     item.setInsertText(insertText)
+    item.setAdditionalTextEdits(importStatement.asJava)
 
     val kind = completionKind(element.getKind)
     kind.foreach(item.setKind)
@@ -291,5 +368,45 @@ class JavaCompletionProvider(
       case ElementKind.METHOD => Some(CompletionItemKind.Method)
       case _ => None
     }
+
+}
+
+sealed trait ScopeElement {
+  def element: Element
+}
+case class SimpleElement(element: Element) extends ScopeElement
+
+case class ImportableElement(element: Element) extends ScopeElement
+
+class JavaClassVisitor(elements: Elements, visitMember: Element => Boolean)
+    extends SymbolSearchVisitor {
+  private def toDotPackage(pkg: String) =
+    pkg.replace("/", ".").stripSuffix(".")
+  override def shouldVisitPackage(pkg: String): Boolean = {
+    !elements.getAllPackageElements(toDotPackage(pkg)).isEmpty()
+  }
+
+  override def visitClassfile(pkg: String, filename: String): Int = {
+    val all =
+      elements.getAllPackageElements(toDotPackage(pkg)).asScala.flatMap { pkg =>
+        pkg.getEnclosedElements().asScala.find { cls =>
+          cls.getSimpleName().toString + ".class" == filename
+        }
+
+      }
+    all.filter(visitMember).size
+  }
+
+  override def visitWorkspaceSymbol(
+      path: Path,
+      symbol: String,
+      kind: SymbolKind,
+      range: lsp4j.Range
+  ): Int = {
+    pprint.log(path)
+    0
+  }
+
+  override def isCancelled(): Boolean = false
 
 }

@@ -9,6 +9,12 @@ import scala.jdk.CollectionConverters.IterableHasAsScala
 
 import com.sun.source.tree.Scope
 import com.sun.source.util.JavacTask
+import javax.lang.model.element.PackageElement
+import scala.meta.pc.SymbolSearchVisitor
+import java.nio.file.Path
+import org.eclipse.lsp4j
+import org.eclipse.lsp4j.SymbolKind
+import scala.meta.pc.SymbolSearch
 
 object JavaScopeVisitor {
 
@@ -21,7 +27,6 @@ object JavaScopeVisitor {
   def scopeMembers(task: JavacTask, scope: Scope): List[Element] = {
     val scopes = unfurlScope(scope, Nil)
     val elements = task.getElements
-
     (for {
       curScope <- scopes
       member <- curScope.getLocalElements.asScala

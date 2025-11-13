@@ -11,6 +11,7 @@ import scala.meta.pc.CancelToken
 import munit.Location
 import munit.TestOptions
 import org.eclipse.lsp4j.CompletionItem
+import scala.meta.internal.metals.TextEdits
 
 class BaseJavaCompletionSuite extends BaseJavaPCSuite {
   def check(
@@ -36,6 +37,46 @@ class BaseJavaCompletionSuite extends BaseJavaPCSuite {
       assertNoDiff(
         out.toString(),
         expected,
+      )
+    }
+  }
+
+  // TODO reuse also with Scala one
+  def checkEdit(
+      name: TestOptions,
+      original: String,
+      expected: String,
+      filterText: String = "",
+      assertSingleItem: Boolean = true,
+      filter: String => Boolean = _ => true,
+      command: Option[String] = None,
+      itemIndex: Int = 0,
+      filename: String = "A.java",
+  )(implicit loc: Location): Unit = {
+    test(name) {
+      val items =
+        getItems(original, filename).filter(item => filter(item.getLabel))
+      if (items.isEmpty) fail("obtained empty completions!")
+      if (assertSingleItem && items.length != 1) {
+        fail(
+          s"expected single completion item, obtained ${items.length} items.\n${items}"
+        )
+      }
+      if (items.size <= itemIndex) fail("Not enough completion items")
+      val item = items(itemIndex)
+      val (code, _) = params(original, filename)
+      val obtained = TextEdits.applyEdits(code, item)
+      assertNoDiff(
+        obtained,
+        expected,
+      )
+      if (filterText.nonEmpty) {
+        assertNoDiff(item.getFilterText, filterText, "Invalid filter text")
+      }
+      assertNoDiff(
+        Option(item.getCommand).fold("")(_.getCommand),
+        command.getOrElse(""),
+        "Invalid command",
       )
     }
   }
