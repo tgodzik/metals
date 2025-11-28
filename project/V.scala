@@ -85,7 +85,7 @@ object V {
 
   val qdox = "2.2.0"
 
-  val protobuf = "4.32.1"
+  val protobuf = "4.33.1"
 
   val sbt2Version = "2.0.0-RC6"
 
