@@ -49,8 +49,7 @@ class BazelLspSuite
       _ = assertNoDiff(
         client.workspaceMessageRequests,
         List(
-          importMessage,
-          Messages.DeprecatedRemovedScalaVersion.message(Set("2.13.12")),
+          importMessage
         ).mkString("\n"),
       )
       _ = assert(bazelBspConfig.exists)
@@ -429,7 +428,7 @@ class BazelLspSuite
     val bazelVersion821 = "8.2.1"
     for {
       _ <- initialize(
-        BazelModuleLayout(moduleWorkspaceLayout, "3.3.6", bazelVersion821)
+        BazelModuleLayout(moduleWorkspaceLayout, V.scala3, bazelVersion821)
       )
       _ = assert(bazelBspConfig.exists)
 
