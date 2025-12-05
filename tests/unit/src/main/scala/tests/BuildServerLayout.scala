@@ -154,6 +154,16 @@ object BazelBuildLayout extends BuildToolLayout {
         |    url = "https://github.com/bazelbuild/rules_scala/releases/download/v6.4.0/rules_scala-v6.4.0.tar.gz",
         |)
         |
+        |RULES_JVM_EXTERNAL_TAG = "4.5"
+        |RULES_JVM_EXTERNAL_SHA = "b17d7388feb9bfa7f2fa09031b32707df529f26c91ab9e5d909eb1676badd9a6"
+        |
+        |http_archive(
+        |    name = "rules_jvm_external",
+        |    strip_prefix = "rules_jvm_external-%s" % RULES_JVM_EXTERNAL_TAG,
+        |    sha256 = RULES_JVM_EXTERNAL_SHA,
+        |    url = "https://github.com/bazelbuild/rules_jvm_external/archive/%s.zip" % RULES_JVM_EXTERNAL_TAG,
+        |)
+        |
         |load("@io_bazel_rules_scala//:scala_config.bzl", "scala_config")
         |# Stores Scala version and other configuration
         |# 2.12 is a default version, other versions can be use by passing them explicitly:
@@ -218,8 +228,8 @@ object BazelModuleLayout extends BuildToolLayout {
   ): String =
     s"""|
         |bazel_dep(name = "bazel_skylib", version = "1.8.1")
-        |bazel_dep(name = "rules_scala", version = "7.0.0")
         |bazel_dep(name = "rules_java", version = "8.15.1")
+        |bazel_dep(name = "rules_scala", version = "7.0.0")
         |bazel_dep(name = "rules_python", version = "1.5.3")
         |
         |${if (enableToolChainRegistration) "register_toolchains(\"//:semanticdb_toolchain\")" else ""}
