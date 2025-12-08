@@ -72,6 +72,7 @@ class CompletionIdentifierSuite extends BaseJavaCompletionSuite {
       |""".stripMargin,
     """
       |OneMore
+      |OneTouchActionHandler
       |""".stripMargin,
   )
 
@@ -90,6 +91,18 @@ class CompletionIdentifierSuite extends BaseJavaCompletionSuite {
       |""".stripMargin,
     """
       |List
+      |List
+      |ListSelectionHandler
+      |List12
+      |ListN
+      |ListItr
+      |AccessibleAWTList
+      |AccessibleAWTListChild
+      |JList
+      |AccessibleJList
+      |AccessibleJListChild
+      |SubList
+      |AbstractImmutableList
       |""".stripMargin,
     filterItem = item => !item.getLabel().contains(" - "),
   )
@@ -111,6 +124,11 @@ class CompletionIdentifierSuite extends BaseJavaCompletionSuite {
       |ListResourceBundle
       |ListIterator
       |List
+      |List
+      |ListSelectionHandler
+      |List12
+      |ListN
+      |ListItr
       |TooManyListenersException
       |LinkedList
       |EventListenerProxy
@@ -118,6 +136,13 @@ class CompletionIdentifierSuite extends BaseJavaCompletionSuite {
       |ArrayList
       |AbstractSequentialList
       |AbstractList
+      |AccessibleAWTList
+      |AccessibleAWTListChild
+      |JList
+      |AccessibleJList
+      |AccessibleJListChild
+      |SubList
+      |AbstractImmutableList
       |""".stripMargin,
     filterItem = item => !item.getLabel().contains(" - "),
   )
