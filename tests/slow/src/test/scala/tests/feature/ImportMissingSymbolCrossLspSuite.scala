@@ -67,7 +67,9 @@ class ImportMissingSymbolCrossLspSuite
         |def main =
         |  println(1.<<incr>>)
         |""".stripMargin,
+    // https://github.com/scalameta/metals/issues/7998
     s"""|${ImportMissingSymbol.title("incr", "example.IntEnrichment")}
+        |${CreateNewSymbol.method("incr")}
         |${ExtractValueCodeAction.title("1.incr")}
         |${ConvertToNamedArguments.title("println(...)")}
         |""".stripMargin,
@@ -109,6 +111,7 @@ class ImportMissingSymbolCrossLspSuite
         |  println(1.<<incr>>)
         |""".stripMargin,
     s"""|${ImportMissingSymbol.title("incr", "example.A$package")}
+        |${CreateNewSymbol.method("incr")}
         |${ExtractValueCodeAction.title("1.incr")}
         |${ConvertToNamedArguments.title("println(...)")}
         |""".stripMargin,
@@ -166,7 +169,7 @@ class ImportMissingSymbolCrossLspSuite
        |}
        |""".stripMargin,
     s"""|${ImportMissingSymbol.title("Future", "scala.concurrent")}
-        |${ImportMissingSymbol.title("Future", "java.util.concurrent")}
+        |${SourceAddMissingImports.title}
         |${CreateNewSymbol.title("Future")}
         |""".stripMargin,
     """|package a
