@@ -467,6 +467,13 @@ object Embedded {
               "https://oss.sonatype.org/content/repositories/snapshots/"
             )
           )
+      } else if (scalaVersion.exists(_.contains("NIGHTLY"))) {
+        settings
+          .addRepositories(
+            MavenRepository(
+              "https://repo.scala-lang.org/artifactory/maven-nightlies"
+            )
+          )
       } else settings
 
     withPossibleSnapshotRepo
