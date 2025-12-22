@@ -38,7 +38,9 @@ case class ScalaTarget(
 
   private def scalaDialect: Dialect = {
     def kindProjector = options.exists(KindProjectorRegex.matches)
-    def scalaFuture = options.exists(ExperimentalSyntaxRegex.matches)
+    def scalaFuture = options.exists(opt =>
+      opt.contains("-preview") || ExperimentalSyntaxRegex.matches(opt)
+    )
     val dialect =
       ScalaVersions.dialectForScalaVersion(scalaVersion, includeSource3 = false)
 
