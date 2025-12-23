@@ -21,7 +21,7 @@ object V {
   val sbtMill = "2.13.15"
 
   // Rules need to be manually updated to support
-  val bazelScalaVersion = "2.13.12"
+  val bazelScalaVersion = "2.13.16"
 
   val betterMonadicFor = "0.3.1"
 
