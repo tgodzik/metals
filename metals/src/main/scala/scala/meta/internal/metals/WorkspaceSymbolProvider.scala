@@ -117,7 +117,7 @@ final class WorkspaceSymbolProvider(
       // the mbt-based index still doesn't support buildtarget-based search
       // so we fallback to the non-mbt index for those queries.
       if (target.isEmpty && userConfig().workspaceSymbolProvider.isMBT) {
-        val (_, workspaceCount) = mbtWorkspaceSymbolProvider.workspaceSymbolSearch(
+          mbtWorkspaceSymbolProvider.workspaceSymbolSearch(
           MbtWorkspaceSymbolSearchParams(
             query.query,
             target.fold("")(_.getUri),
@@ -125,7 +125,7 @@ final class WorkspaceSymbolProvider(
           visitor,
         )
         val (res, inDepsCount) = inDependencies.search(query, visitor)
-        (res, workspaceCount + inDepsCount)
+        (res, inDepsCount)
       } else {
         if (kind.isPresent) {
           val typeCount = workspaceToplevelSearch(query, visitor, kind)
