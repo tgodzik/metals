@@ -41,7 +41,7 @@ import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper
 import io.modelcontextprotocol.server.McpAsyncServerExchange
 import io.modelcontextprotocol.server.McpServer
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
-import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider
+import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult
 import io.modelcontextprotocol.spec.McpSchema.Content
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel
@@ -93,17 +93,12 @@ class MetalsMcpServer(
 
   private val cancelable = new MutableCancelable()
 
-  private val sseEndpoint = "/sse"
-  private val messageEndpoint = "/message"
-
   def run(): Unit = {
-    val servlet =
-      new HttpServletSseServerTransportProvider.Builder()
-        .jsonMapper(jsonMapper)
-        .baseUrl("/")
-        .sseEndpoint(sseEndpoint)
-        .messageEndpoint(messageEndpoint)
-        .build()
+
+    val servlet = new HttpServletStreamableServerTransportProvider.Builder()
+      .jsonMapper(jsonMapper)
+      .mcpEndpoint(MetalsMcpServer.mcpEndpoint)
+      .build()
 
     val capabilities = ServerCapabilities
       .builder()
@@ -158,11 +153,11 @@ class MetalsMcpServer(
         Servlets
           .servlet(
             "SseServlet",
-            classOf[HttpServletSseServerTransportProvider],
+            classOf[HttpServletStreamableServerTransportProvider],
             () =>
-              new InstanceHandle[HttpServletSseServerTransportProvider] {
+              new InstanceHandle[HttpServletStreamableServerTransportProvider] {
                 override def getInstance()
-                    : HttpServletSseServerTransportProvider = servlet
+                    : HttpServletStreamableServerTransportProvider = servlet
                 override def release(): Unit = { servlet.close() }
 
               },
@@ -1293,6 +1288,10 @@ class MetalsMcpServer(
       getFileInFocusOpt
         .getOrElse(throw MissingFileInFocusException)
   }
+}
+
+object MetalsMcpServer {
+  val mcpEndpoint = "/sse"
 }
 
 object McpMessages {
