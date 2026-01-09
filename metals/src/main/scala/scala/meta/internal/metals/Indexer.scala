@@ -287,7 +287,7 @@ case class Indexer(indexProviders: IndexProviders, mbtBuild: () => MbtBuild)(
     }
 
     progress.message = "updating classes"
-    val targets = buildTargets.allBuildTargetIds
+    val targets = buildTargets.activeBuildTargetIds
     buildTargetClasses
       .rebuildIndex(targets)
       .foreach { _ =>

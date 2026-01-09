@@ -911,6 +911,14 @@ abstract class MetalsLspService(
     focusedDocumentBuildTarget.set(
       buildTargets.inverseSources(path).getOrElse(null)
     )
+    buildTargets
+      .inverseSources(path)
+      .flatMap(buildTargets.activatePlatformForTarget)
+      .foreach { platform =>
+        buildTargetClasses.rebuildIndex(
+          buildTargets.targetsByPlatform(platform)
+        )
+      }
 
     // Update md5 fingerprint from file contents on disk
     fingerprints.add(path, FileIO.slurp(path, charset))
@@ -1029,6 +1037,17 @@ abstract class MetalsLspService(
       prevBuildTarget: b.BuildTargetIdentifier,
   ): Future[DidFocusResult.Value] = {
     userConfigPromise.future.flatMap { _ =>
+      focusedDocumentBuildTarget.set(
+        buildTargets.inverseSources(path).getOrElse(null)
+      )
+      buildTargets
+        .inverseSources(path)
+        .flatMap(buildTargets.activatePlatformForTarget)
+        .foreach { platform =>
+          buildTargetClasses.rebuildIndex(
+            buildTargets.targetsByPlatform(platform)
+          )
+        }
       buildTargets.inverseSources(path) match {
         case Some(target)
             if userConfig.buildOnFocus && prevBuildTarget != target =>
@@ -2066,6 +2085,7 @@ abstract class MetalsLspService(
     semanticDBIndexer.reset()
     worksheetProvider.reset()
     symbolSearch.reset()
+    buildTargets.resetActivePlatforms()
   }
 
   def fileWatcher: FileWatcher
