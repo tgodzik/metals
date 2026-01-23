@@ -63,7 +63,7 @@ object V {
 
   val munit = "1.2.3"
 
-  val modelContextProtocol = "0.17.1"
+  val modelContextProtocol = "0.17.2"
 
   val pprint = "0.7.3"
 
