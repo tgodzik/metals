@@ -301,6 +301,7 @@ abstract class MetalsLspService(
     downstreamTargets,
     initialServerConfig,
     () => userConfig,
+    clientConfig,
   )
 
   protected def semanticdbs(): Semanticdbs
@@ -718,12 +719,14 @@ abstract class MetalsLspService(
 
   protected val codeActionProvider: CodeActionProvider = new CodeActionProvider(
     compilers,
+    folder,
     buffers,
     buildTargets,
     scalafixProvider,
     trees,
     diagnostics,
     languageClient,
+    clientConfig,
   )
 
   protected val inlayHintResolveProvider: InlayHintResolveProvider =

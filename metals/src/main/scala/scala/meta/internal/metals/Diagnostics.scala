@@ -52,6 +52,7 @@ final class Diagnostics(
     downstreamTargets: PreviouslyCompiledDownsteamTargets,
     config: MetalsServerConfig,
     userConfig: () => UserConfiguration,
+    clientConfig: ClientConfiguration,
 ) {
   private val diagnostics =
     TrieMap.empty[AbsolutePath, ju.Queue[DiagnosticWithOrigin]]
@@ -192,25 +193,38 @@ final class Diagnostics(
   def onBuildPublishDiagnostics(
       params: bsp4j.PublishDiagnosticsParams
   ): Unit = {
-    val diagnostics = params.getDiagnostics().asScala.map(_.toLsp).toSeq
-    val publish =
+    val diagnostics =
       for {
         path <- Try(params.getTextDocument.getUri.toAbsolutePath).toOption
+        shouldShowExplainDiagnostic = buildTargets
+          .inverseSources(path)
+          .flatMap(buildTargets.scalaTarget)
+          .exists(target => target.supportExplainDiagnostic)
+        isVirtualDocumentSupported = clientConfig
+          .isVirtualDocumentSupported() && shouldShowExplainDiagnostic
+        diagnostics = params
+          .getDiagnostics()
+          .asScala
+          .map(
+            _.toLsp(
+              path,
+              isVirtualDocumentSupported,
+            )
+          )
+          .toSeq
         if (path.isFile)
-      } yield onPublishDiagnostics(
-        path,
-        diagnostics,
-        params.getReset(),
-        params.getOriginId(),
-      )
+        _ = onPublishDiagnostics(
+          path,
+          diagnostics,
+          params.getReset(),
+          params.getOriginId(),
+        )
+      } yield diagnostics
 
-    publish.getOrElse {
+    diagnostics.getOrElse {
       scribe.warn(
         s"Invalid text document uri received from build server: ${params.getTextDocument.getUri}"
       )
-      diagnostics.map(_.getMessage()).foreach { msg =>
-        scribe.info(s"BSP server: $msg")
-      }
     }
   }
 

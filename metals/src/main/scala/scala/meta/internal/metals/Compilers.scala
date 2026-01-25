@@ -4,7 +4,6 @@ import java.net.URI
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Duration
-import java.util.Collections
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -439,6 +438,64 @@ class Compilers(
       },
       "fileDidChange",
     )
+
+  /**
+   * Compile a file with the -explain flag to get detailed error explanations.
+   * This creates a temporary presentation compiler with the -explain option.
+   */
+  def compileWithExplain(path: AbsolutePath): Future[List[Diagnostic]] = {
+    buildTargets.inverseSources(path) match {
+      case Some(targetId) =>
+        buildTargets.scalaTarget(targetId) match {
+          case Some(scalaTarget)
+              if ScalaVersions.isScala3Version(scalaTarget.scalaVersion) =>
+            compileWithExplainForTarget(path, scalaTarget)
+          case Some(_) =>
+            // -explain is only available for Scala 3
+            Future.successful(Nil)
+          case None =>
+            Future.successful(Nil)
+        }
+      case None =>
+        Future.successful(Nil)
+    }
+  }
+
+  private def compileWithExplainForTarget(
+      path: AbsolutePath,
+      scalaTarget: ScalaTarget,
+  ): Future[List[Diagnostic]] = {
+    val scalaVersion = scalaTarget.scalaVersion
+    mtagsResolver.resolve(scalaVersion) match {
+      case Some(mtags) =>
+        val explainCompiler = ScalaLazyCompiler(
+          scalaTarget,
+          mtags,
+          search,
+          completionItemPriority(),
+          serverConfig.compilers.sourcePathMode,
+          additionalOptions = Seq("-explain"),
+        )
+
+        val input = path.toInputFromBuffers(buffers)
+        val params = Compilers.DidChangeCompilerFileParams(
+          path.toNIO.toUri(),
+          input.value,
+          shouldReturnDiagnostics = true,
+        )
+        explainCompiler.await
+          .didChange(params)
+          .asScala
+          .map(_.asScala.toList)
+          .andThen { case _ =>
+            // Clean up the temporary compiler
+            explainCompiler.shutdown()
+          }
+
+      case None =>
+        Future.successful(Nil)
+    }
+  }
 
   private def didChangeBSPDiagnostics(
       path: AbsolutePath,
