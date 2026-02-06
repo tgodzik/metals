@@ -1250,7 +1250,7 @@ final case class TestingServer(
       .codeLens(params)
       .asScala
       .map(_.asScala)
-      .withTimeout(10, util.concurrent.TimeUnit.SECONDS)
+      .withTimeout(10, util.concurrent.TimeUnit.SECONDS, reason = None)
       .recover { _ =>
         scribe.info(s"Timeout for fetching lenses reached for $filename")
         Nil
@@ -1285,7 +1285,7 @@ final case class TestingServer(
           if (lenses.size >= minExpectedLenses) Future.successful(lenses)
           else codeLenses.future
         }
-        .withTimeout(60, util.concurrent.TimeUnit.SECONDS)
+        .withTimeout(60, util.concurrent.TimeUnit.SECONDS, reason = None)
     } yield lenses.toList
   }
 
