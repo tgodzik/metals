@@ -48,6 +48,13 @@ object ServerCommands {
     """Sync the currently focused file with the build server.
       |""".stripMargin,
   )
+  
+  val DisconnectBuildServerAndShutdown = new Command(
+    "build-disconnect-and-shutdown",
+    "Disconnect from build server and shut it down",
+    """|Disconnect from the build server and shut it down so that its process exits.
+       |Use when closing the editor if you want no leftover Bloop (or other build server) process.""".stripMargin,
+  )
 
   val RestartBuildServer = new Command(
     "build-restart",
@@ -865,6 +872,7 @@ object ServerCommands {
       DecodeFile,
       DisconnectBuildServer,
       SyncFile,
+      DisconnectBuildServerAndShutdown,
       ListBuildTargets,
       ScanWorkspaceSources,
       StartDebugAdapter,

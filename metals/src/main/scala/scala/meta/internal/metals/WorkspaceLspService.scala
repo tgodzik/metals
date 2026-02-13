@@ -1101,6 +1101,11 @@ class WorkspaceLspService(
           _.connect(Disconnect(shutdownBuildServer = false)).ignoreValue,
           ServerCommands.DisconnectBuildServer.title,
         ).asJavaObject
+      case ServerCommands.DisconnectBuildServerAndShutdown() =>
+        onCurrentFolder(
+          _.connect(Disconnect(shutdownBuildServer = true)).ignoreValue,
+          ServerCommands.DisconnectBuildServerAndShutdown.title,
+        ).asJavaObject
       case ServerCommands.DecodeFile(uri) =>
         getServiceForOpt(uri)
           .orElse(currentFolder)
