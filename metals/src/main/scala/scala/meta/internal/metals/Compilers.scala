@@ -795,11 +795,11 @@ class Compilers(
       params: SemanticTokensParams,
       token: CancelToken,
   ): Future[SemanticTokens] = {
+    val path = params.getTextDocument.getUri.toAbsolutePath
     val emptyTokens = ju.Collections.emptyList[Integer]();
-    if (!userConfig().enableSemanticHighlighting) {
+    if (!userConfig().enableSemanticHighlighting || path.isTwirlTemplate) {
       Future { new SemanticTokens(emptyTokens) }
     } else {
-      val path = params.getTextDocument.getUri.toAbsolutePath
       loadCompiler(path)
         .map { compiler =>
           val (input, _, adjust) =
@@ -1262,21 +1262,27 @@ class Compilers(
       codeActionId: String,
       codeActionPayload: Option[Object],
   ): Future[ju.List[TextEdit]] = {
-    withPCAndAdjustLsp(params) { (pc, pos, adjust) =>
-      pc.codeAction(
-        CompilerOffsetParamsUtils.fromPos(
-          pos,
-          token,
-          outlineFilesProvider.getOutlineFiles(pc.buildTargetId()),
-        ),
-        codeActionId,
-        codeActionPayload.asJava,
-      ).asScala
-        .map { edits =>
-          adjust.adjustTextEdits(edits)
-        }
+    // disable code actions completely for Twirl templates
+    val isTwirl = params.getTextDocument.getUri.isTwirlTemplate
+    if (isTwirl) {
+      Future.successful(Nil.asJava)
+    } else {
+      withPCAndAdjustLsp(params) { (pc, pos, adjust) =>
+        pc.codeAction(
+          CompilerOffsetParamsUtils.fromPos(
+            pos,
+            token,
+            outlineFilesProvider.getOutlineFiles(pc.buildTargetId()),
+          ),
+          codeActionId,
+          codeActionPayload.asJava,
+        ).asScala
+          .map { edits =>
+            adjust.adjustTextEdits(edits)
+          }
+      }.getOrElse(Future.successful(Nil.asJava))
     }
-  }.getOrElse(Future.successful(Nil.asJava))
+  }
 
   def supportedCodeActions(path: AbsolutePath): ju.List[String] = {
     loadCompiler(path).map { pc =>
@@ -1381,35 +1387,37 @@ class Compilers(
       findTypeDef: Boolean,
   ): Future[DefinitionResult] =
     withPCAndAdjustLsp(params) { (pc, pos, adjust) =>
-      val params = CompilerOffsetParamsUtils.fromPos(
+      val paramsWithOutline = CompilerOffsetParamsUtils.fromPos(
         pos,
         token,
         outlineFilesProvider.getOutlineFiles(pc.buildTargetId()),
       )
+
       val defResult =
-        if (findTypeDef) pc.typeDefinition(params)
+        if (findTypeDef) pc.typeDefinition(paramsWithOutline)
         else
           pc.definition(CompilerOffsetParamsUtils.fromPos(pos, token))
 
       for {
         c <- defResult.asScala
-        locations <-
-          if (c.isResolved())
-            Future.successful(
-              adjust.adjustLocations(c.locations()).asScala.toSeq
+        originalUri = paramsWithOutline.uri
+        locations = c.locations()
+        _ <-
+          if (c.isResolved()) {
+            val adjustable = locations.asScala.filter(loc =>
+              originalUri.toString == loc.getUri()
             )
-          else
+            Future.successful(
+              adjust.adjustLocations(adjustable.asJava).asScala.toSeq
+            )
+          } else
             locateInsideDecompiledJar(c.symbol(), c.locations().asScala.toSeq)
       } yield {
-        val definitionPaths = locations.map { loc =>
-          loc.getUri().toAbsolutePath
-        }.toSet
-
-        val definitionPath = if (definitionPaths.size == 1) {
-          Some(definitionPaths.head)
-        } else {
-          None
-        }
+        val definitionPaths =
+          locations.asScala.map(_.getUri().toAbsolutePath).asScala.toSet
+        val definitionPath =
+          if (definitionPaths.size == 1) Some(definitionPaths.head)
+          else None
         DefinitionResult(
           locations.asJava,
           c.symbol(),
