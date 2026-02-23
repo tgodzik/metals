@@ -175,7 +175,6 @@ case class UserConfiguration(
         optStringField("millScript", millScript),
         optStringField("scalafmtConfigPath", scalafmtConfigPath),
         optStringField("scalafixConfigPath", scalafixConfigPath),
-        optStringField("scalafixConfigPath", scalafixConfigPath),
         mapField("symbolPrefixes", symbolPrefixes),
         mapListField("shimGlobs", shimGlobs),
         Some(("worksheetScreenWidth", worksheetScreenWidth)),
@@ -501,6 +500,14 @@ object UserConfiguration {
            |""".stripMargin,
       ),
       UserConfigurationOption(
+        "scalafix-rules-dependencies",
+        """`[]`""",
+        """["com.github.liancheng::organize-imports:0.6.0"]""",
+        "Scalafix rules dependencies",
+        """Optional list of Scalafix rules dependencies to use for running `scalafix --rules`.""",
+        isArray = true,
+      ),
+      UserConfigurationOption(
         "excluded-packages",
         """`[]`.""",
         """["akka.actor.typed.javadsl"]""",
@@ -522,11 +529,15 @@ object UserConfiguration {
             |["--sun"]
             |```
             |""".stripMargin,
+        isArray = true,
       ),
       UserConfigurationOption(
-        "bloop-sbt-already-installed", "false", "false",
+        "bloop-sbt-already-installed",
+        "false",
+        "false",
         "Don't generate Bloop plugin file for sbt",
         "If true, Metals will not generate `metals.sbt` files under the assumption that sbt-bloop is already manually installed in the sbt build. Build import will fail with a 'not valid command bloopInstall' error in case Bloop is not manually installed in the build when using this option.",
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "bloop-version",
@@ -544,6 +555,7 @@ object UserConfiguration {
         """|Optional list of JVM properties to pass along to the Bloop server.
            |Please follow this guide for the format https://scalacenter.github.io/bloop/docs/server-reference#global-settings-for-the-server"
            |""".stripMargin,
+        isArray = true,
       ),
       UserConfigurationOption(
         "super-method-lenses-enabled",
@@ -554,6 +566,7 @@ object UserConfiguration {
            |Disabled lenses are not calculated for opened documents which might speed up document processing.
            |
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "inlay-hints.inferred-types.enable",
@@ -564,6 +577,7 @@ object UserConfiguration {
            |displayed either as additional decorations if they are supported by the editor or
            |shown in the hover.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "inlay-hints.named-parameters.enable",
@@ -574,6 +588,7 @@ object UserConfiguration {
            |displayed either as additional decorations if they are supported by the editor or 
            |shown in the hover.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "inlay-hints.by-name-parameters.enable",
@@ -584,6 +599,7 @@ object UserConfiguration {
            |displayed either as additional '=>' decorations if they are supported by the editor or 
            |shown in the hover.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "inlay-hints.implicit-arguments.enable",
@@ -594,6 +610,7 @@ object UserConfiguration {
            |displayed either as additional decorations if they are supported by the editor or
            |shown in the hover.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "inlay-hints.implicit-conversions.enable",
@@ -604,6 +621,7 @@ object UserConfiguration {
            |displayed either as additional decorations if they are supported by the editor or
            |shown in the hover.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "inlay-hints.type-parameters.enable",
@@ -614,6 +632,7 @@ object UserConfiguration {
            |displayed either as additional decorations if they are supported by the editor or
            |shown in the hover.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "inlay-hints.hints-in-pattern-match.enable",
@@ -624,6 +643,7 @@ object UserConfiguration {
            |displayed either as additional decorations if they are supported by the editor or
            |shown in the hover.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "inlay-hints.hints-x-ray-mode.enable",
@@ -633,6 +653,7 @@ object UserConfiguration {
         """|When this option is enabled, each method/attribute call in a multi-line chain will get
            | its own type annotation.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "inlay-hints.closing-labels.enable",
@@ -642,6 +663,7 @@ object UserConfiguration {
         """|When this option is enabled, each method/class/object definition that uses braces syntax,
            | will get a closing label hint next to the closing brace with the name of the definition.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "enable-semantic-highlighting",
@@ -651,6 +673,7 @@ object UserConfiguration {
         """|When this option is enabled, Metals will provide semantic tokens for clients that support it.
            |The feature should work within all supported files extensions aside from Java.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "enable-indent-on-paste",
@@ -660,6 +683,7 @@ object UserConfiguration {
         """|When this option is enabled, when a snippet is pasted into a Scala file, Metals will
            |try to adjust the indentation to that of the current cursor.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "fallback-scala-version",
@@ -735,6 +759,7 @@ object UserConfiguration {
         """|If a build server supports it (for example Bloop or Scala CLI), setting it to true
            |will make the logs contain all the possible debugging information including
            |about incremental compilation in Zinc.""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "auto-import-builds",
@@ -763,6 +788,7 @@ object UserConfiguration {
         """|If your build tool can also serve as a build server,
            |default to using it instead of Bloop.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "presentation-compiler-diagnostics",
@@ -847,6 +873,7 @@ object UserConfiguration {
         """|When using Scala 3, use best effort compilation to improve Metals 
            |correctness when the workspace doesn't compile.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "default-shell",
@@ -866,6 +893,7 @@ object UserConfiguration {
         "Start MCP server",
         """|If Metals should start the MCP (SSE) server, that an AI agent can connect to.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "mcp-client",
