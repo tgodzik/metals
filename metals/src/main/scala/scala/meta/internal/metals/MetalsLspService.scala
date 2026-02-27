@@ -608,6 +608,7 @@ abstract class MetalsLspService(
     packageProvider,
     scalaVersionSelector,
     clientConfig.icons(),
+    clientConfig.isReadClipboardProvider(),
     onCreate = path => {
       for {
         _ <- onCreate(path)
