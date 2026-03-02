@@ -295,7 +295,7 @@ class CompilersLspSuite
       )
     )
   }
-  
+
   test("cache-eviction") {
     cleanWorkspace()
     val numTargets = 35

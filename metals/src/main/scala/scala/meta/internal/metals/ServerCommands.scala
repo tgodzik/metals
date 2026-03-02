@@ -48,7 +48,7 @@ object ServerCommands {
     """Sync the currently focused file with the build server.
       |""".stripMargin,
   )
-  
+
   val DisconnectBuildServerAndShutdown = new Command(
     "build-disconnect-and-shutdown",
     "Disconnect from build server and shut it down",

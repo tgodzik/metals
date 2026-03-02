@@ -217,7 +217,7 @@ final class FileDecoderProvider(
 
   private val metalsDecodeExtensions = Set(
     "javap", "javap-verbose", "tasty-decoded", "cfr", "semanticdb-compact",
-    "semanticdb-detailed", "semanticdb-proto", "explain"
+    "semanticdb-detailed", "semanticdb-proto", "explain",
   ) ++ semanticdbExtensions
 
   val supportedExtensions: Set[String] = Set(
