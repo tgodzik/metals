@@ -130,6 +130,7 @@ class MetalsMcpServer(
     asyncServer.addTool(createGenerateScalafixRuleTool()).subscribe()
     asyncServer.addTool(createRunScalafixRuleTool()).subscribe()
     asyncServer.addTool(createListScalafixRulesTool()).subscribe()
+    asyncServer.addTool(createGetSourceTool()).subscribe()
 
     // serve servlet
     val servletDeployment = Servlets
@@ -1308,6 +1309,70 @@ class MetalsMcpServer(
             )
             .isError(false)
             .build()
+        }.toMono
+      },
+    )
+  }
+
+  private def createGetSourceTool(): AsyncToolSpecification = {
+    val schema = """
+      {
+        "type": "object",
+        "properties": {
+          "fqcn": {
+            "type": "string",
+            "description": "Fully qualified name of the symbol to get source for"
+          },
+          "fileInFocus": {
+            "type": "string",
+            "description": "The current file in focus for context. If not provided, will use first available build target."
+          },
+          "module": {
+            "type": "string",
+            "description": "Explicit module (build target) name to use for context, e.g. 'core', 'services'. Takes precedence over fileInFocus."
+          }
+        },
+        "required": ["fqcn"]
+      }
+    """
+    val tool = Tool
+      .builder()
+      .name("get-source")
+      .description(
+        """|Get the source file contents for a given Scala symbol. Returns the full content
+           |of the file containing the symbol, allowing you to read the implementation.
+           |Useful for understanding library code, inspecting dependencies, and code analysis.
+           |
+           |When no fileInFocus is provided, automatically uses the first available
+           |build target for context.""".stripMargin
+      )
+      .inputSchema(jsonMapper, schema)
+      .build()
+    new AsyncToolSpecification(
+      tool,
+      withErrorHandling { (_, arguments) =>
+        val fqcn = arguments.getFqcn
+        val pathOpt = arguments.getFileInFocusOpt
+        val moduleOpt = arguments.getOptNoEmptyString("module")
+        Future {
+          queryEngine.getSource(fqcn, pathOpt, moduleOpt) match {
+            case Some((filePath, content)) =>
+              CallToolResult
+                .builder()
+                .content(
+                  createContent(s"// Source file: $filePath\n$content")
+                )
+                .isError(false)
+                .build()
+            case None =>
+              CallToolResult
+                .builder()
+                .content(
+                  createContent(s"Error: Source not found for symbol: $fqcn")
+                )
+                .isError(true)
+                .build()
+          }
         }.toMono
       },
     )
