@@ -423,14 +423,17 @@ object UserConfiguration {
     List(
       UserConfigurationOption(
         "java-home",
-        "`JAVA_HOME` environment variable with fallback to `user.home` system property.",
+        "",
         """"/Library/Java/JavaVirtualMachines/jdk1.8.0_192.jdk/Contents/Home"""",
         "Java Home directory",
         "The Java Home directory used for indexing JDK sources and locating the `java` binary.",
+        defaultDescription = Some(
+          "`JAVA_HOME` environment variable with fallback to `user.home` system property."
+        ),
       ),
       UserConfigurationOption(
         "sbt-script",
-        """empty string `""`.""",
+        "",
         """"/usr/local/bin/sbt"""",
         "sbt script",
         """Optional absolute path to an `sbt` executable to use for running `sbt bloopInstall`.
@@ -441,7 +444,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "gradle-script",
-        """empty string `""`.""",
+        "",
         """"/usr/local/bin/gradle"""",
         "Gradle script",
         """Optional absolute path to a `gradle` executable to use for running `gradle bloopInstall`.
@@ -451,7 +454,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "maven-script",
-        """empty string `""`.""",
+        "",
         """"/usr/local/bin/mvn"""",
         "Maven script",
         """Optional absolute path to a `maven` executable to use for generating bloop config.
@@ -460,7 +463,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "mill-script",
-        """empty string `""`.""",
+        "",
         """"/usr/local/bin/mill"""",
         "Mill script",
         """Optional absolute path to a `mill` executable to use for running `mill mill.contrib.bloop.Bloop/install`.
@@ -470,7 +473,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "scalafmt-config-path",
-        """empty string `""`.""",
+        "",
         """"project/.scalafmt.conf"""",
         "Scalafmt config path",
         """Optional custom path to the .scalafmt.conf file.
@@ -480,7 +483,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "scalafix-config-path",
-        """empty string `""`.""",
+        "",
         """"project/.scalafix.conf"""",
         "Scalafix config path",
         """Optional custom path to the .scalafix.conf file.
@@ -501,7 +504,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "scalafix-rules-dependencies",
-        """`[]`""",
+        "[]",
         """["com.github.liancheng::organize-imports:0.6.0"]""",
         "Scalafix rules dependencies",
         """Optional list of Scalafix rules dependencies to use for running `scalafix --rules`.""",
@@ -509,7 +512,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "excluded-packages",
-        """`[]`.""",
+        "[]",
         """["akka.actor.typed.javadsl"]""",
         "Excluded Packages",
         s"""|Packages that will be excluded from completions, imports, and symbol searches.
@@ -549,7 +552,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "bloop-jvm-properties",
-        """["-Xmx1G"].""",
+        """["-Xmx1G"]""",
         """["-Xmx1G"]""",
         "Bloop JVM Properties",
         """|Optional list of JVM properties to pass along to the Bloop server.
@@ -697,17 +700,18 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "test-user-interface",
-        "Code Lenses",
+        "code lenses",
         "test explorer",
         "Test UI used for tests and test suites",
         """|Default way of handling tests and test suites.  The only valid values are
            |"code lenses" and "test explorer".  See https://scalameta.org/metals/docs/integrations/test-explorer
            |for information on how to work with the test explorer.
            |""".stripMargin,
+        values = Some(List("code lenses", "test explorer")),
       ),
       UserConfigurationOption(
         "java-format.eclipse-config-path",
-        """empty string `""`.""",
+        "",
         """"formatters/eclipse-formatter.xml"""",
         "Eclipse Java formatter config path",
         """Optional custom path to the eclipse-formatter.xml file.
@@ -717,7 +721,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "java-format.eclipse-profile",
-        """empty string `""`.""",
+        "",
         """"GoogleStyle"""",
         "Eclipse Java formatting profile",
         """|If the Eclipse formatter file contains more than one profile, this option can be used to control which is used.
@@ -734,7 +738,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "scala-cli-launcher",
-        """empty string `""`.""",
+        "",
         """"/usr/local/bin/scala-cli"""",
         "Scala CLI launcher",
         """Optional absolute path to a `scala-cli` executable to use for running a Scala CLI BSP server.
@@ -745,7 +749,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "custom-project-root",
-        """empty string `""`.""",
+        "",
         """"backend/scalaProject/"""",
         "Custom project root",
         """Optional relative path to your project's root.
@@ -769,10 +773,11 @@ object UserConfiguration {
         """|Automatically import builds rather than prompting the user to choose. "initial" will
            |only automatically import a build when a project is first opened, "all" will automate
            |build imports after subsequent changes as well.""".stripMargin,
+        values = Some(List("off", "initial", "all")),
       ),
       UserConfigurationOption(
         "target-build-tool",
-        """empty string `""`.""",
+        "",
         """"bazel"""",
         "Preferred build tool when multiple are detected",
         """|The preferred build tool to use when multiple build definitions are detected in the workspace.
@@ -883,7 +888,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "default-shell",
-        """empty string `""`.""",
+        "",
         "/usr/bin/fish",
         "Full path to the shell executable to be used as the default",
         """|Optionally provide a default shell executable to use for build operations.
@@ -903,7 +908,7 @@ object UserConfiguration {
       ),
       UserConfigurationOption(
         "mcp-client",
-        """empty string `""`.""",
+        "",
         "claude",
         "MCP Client Name",
         """|This is used in situations where the client you're using doesn't match the editor
@@ -915,6 +920,9 @@ object UserConfiguration {
            |""".stripMargin,
       ),
     )
+
+  def listOptions: String =
+    options.map(_.oneLiner).mkString("\n")
 
   def fromJson(
       json: JsonObject,
