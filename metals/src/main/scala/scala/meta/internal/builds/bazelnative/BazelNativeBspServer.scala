@@ -515,7 +515,11 @@ class BazelNativeBspServer(
           val info = targetData.get(extractLabel(id))
           val cp = info
             .flatMap(_.jvmTargetInfo)
-            .map(_.transitiveCompileTimeJars.map(resolveOutputUri))
+            .map { jvm =>
+              BazelClasspathNormalizer.normalizeCompileClasspath(
+                jvm.transitiveCompileTimeJars.map(resolveOutputUri)
+              )
+            }
             .getOrElse(Nil)
           new JvmCompileClasspathItem(id, cp.asJava)
         }
@@ -710,7 +714,9 @@ class BazelNativeBspServer(
     }
     val transitiveUris =
       jvm.transitiveCompileTimeJars.map(resolveOutputUri)
-    (jarUris ++ transitiveUris).distinct
+    BazelClasspathNormalizer.normalizeCompileClasspath(
+      jarUris ++ transitiveUris
+    )
   }
 
   private def buildDependencyModule(

@@ -141,6 +141,7 @@ object TestGroups {
     "tests.bazelnative.BazelNativeTargetInfoReaderSuite",
     "tests.bazelnative.BazelNativeAspectsManagerSuite",
     "tests.bazelnative.BazelNativeTargetDataSuite",
+    "tests.bazelnative.BazelClasspathNormalizerSuite",
   )
 
   val numberOfShards = 4
