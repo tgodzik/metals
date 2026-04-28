@@ -56,6 +56,7 @@ case class MbtBuild(
         .toSeq
     } else {
       val knownNamespaces = getNamespaces.keySet.asScala.toSet
+      val modulesById = getDependencyModules().asScala.map(m => m.id -> m).toMap
       getNamespaces.asScala.toSeq.map { case (name, namespace) =>
         val dependsOnIds =
           namespace.getDependsOn.asScala.toSeq.distinct.flatMap { depName =>
@@ -73,13 +74,15 @@ case class MbtBuild(
             }
           }
         val globPatterns = namespace.getSources.asScala.toSeq.filter(isGlob)
-        val (validNsModules, invalidNsModules) =
-          namespace.getDependencyModules.asScala.partition(_.isValid)
-        invalidNsModules.foreach { module =>
-          scribe.warn(
-            s"mbt-build: ignoring invalid dependency module ID '${module.id}' in namespace '$name'. Expected format: 'organization:name:version'."
-          )
-        }
+        val nsModules = for {
+          moduleId <- namespace.getDependencyModuleIds.asScala.toSeq
+          module <- modulesById.get(moduleId).orElse {
+            scribe.warn(
+              s"mbt-build: namespace '$name' references unknown dependency module '$moduleId'."
+            )
+            None
+          }
+        } yield module
         MbtTarget(
           name = name,
           id =
@@ -96,7 +99,7 @@ case class MbtBuild(
             )
           ),
           compilerOptions = namespace.getCompilerOptions.asScala.toSeq,
-          dependencyModules = validNsModules.toSeq,
+          dependencyModules = nsModules,
           scalaVersion = Option(namespace.scalaVersion),
           javaHome = Option(namespace.javaHome),
           dependsOn = dependsOnIds,

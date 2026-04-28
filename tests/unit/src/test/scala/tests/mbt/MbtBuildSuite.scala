@@ -55,7 +55,12 @@ class MbtBuildSuite extends tests.BaseSuite {
     val f = dir.resolve("mbt.json")
     val initialContent =
       """|{
-         |  "dependencyModules": [],
+         |  "dependencyModules": [
+         |    {
+         |      "id": "org.scala-lang:scala-library:2.13.16",
+         |      "jar": "/tmp/scala-library.jar"
+         |    }
+         |  ],
          |  "namespaces": {
          |    "core": {
          |      "sources": [
@@ -66,10 +71,7 @@ class MbtBuildSuite extends tests.BaseSuite {
          |        "11"
          |      ],
          |      "dependencyModules": [
-         |        {
-         |          "id": "org.scala-lang:scala-library:2.13.16",
-         |          "jar": "/tmp/scala-library.jar"
-         |        }
+         |        "org.scala-lang:scala-library:2.13.16"
          |      ]
          |    },
          |    "extra": {
@@ -77,10 +79,7 @@ class MbtBuildSuite extends tests.BaseSuite {
          |        "./src/**"
          |      ],
          |      "dependencyModules": [
-         |        {
-         |          "id": "org.scala-lang:scala-library:2.13.16",
-         |          "jar": "/tmp/scala-library.jar"
-         |        }
+         |        "org.scala-lang:scala-library:2.13.16"
          |      ],
          |      "dependsOn": [
          |        "core"
@@ -134,8 +133,7 @@ class MbtBuildSuite extends tests.BaseSuite {
       """|{
          |  "namespaces": {
          |    "app": {
-         |      "sources": ["./src/**/*.scala"],
-         |      "dependencyModules": []
+         |      "sources": ["./src/**/*.scala"]
          |    }
          |  }
          |}

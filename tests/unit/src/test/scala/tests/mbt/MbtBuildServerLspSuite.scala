@@ -62,15 +62,18 @@ class MbtBuildServerLspSuite
       .head
     val mbtJson =
       s"""|{
+          |  "dependencyModules": [
+          |    {
+          |      "id": "org.scala-lang.modules:scala-xml_$scalaBinary:2.3.0",
+          |      "jar": "$xmlJar"
+          |    }
+          |  ],
           |  "namespaces": {
           |    "core": {
           |      "sources": ["src/**"],
           |      "scalaVersion": "${BuildInfo.scalaVersion}",
           |      "dependencyModules": [
-          |        {
-          |          "id": "org.scala-lang.modules:scala-xml_$scalaBinary:2.3.0",
-          |          "jar": "$xmlJar"
-          |        }
+          |        "org.scala-lang.modules:scala-xml_$scalaBinary:2.3.0"
           |      ]
           |    }
           |  }
@@ -124,25 +127,25 @@ class MbtBuildServerLspSuite
 
     val mbtJson =
       s"""{
+         |  "dependencyModules": [
+         |    {
+         |      "id": "org.scala-lang:scala-library:${BuildInfo.scalaVersion}",
+         |      "jar": "$scalaLibJar"
+         |    }
+         |  ],
          |  "namespaces": {
          |    "core": {
          |      "sources": ["core/src/**"],
          |      "scalaVersion": "${BuildInfo.scalaVersion}",
          |      "dependencyModules": [
-         |        {
-         |          "id": "org.scala-lang:scala-library:${BuildInfo.scalaVersion}",
-         |          "jar": "$scalaLibJar"
-         |        }
+         |        "org.scala-lang:scala-library:${BuildInfo.scalaVersion}"
          |      ]
          |    },
          |    "extra": {
          |      "sources": ["extra/src"],
          |      "scalaVersion": "${BuildInfo.scalaVersion}",
          |      "dependencyModules": [
-         |        {
-         |          "id": "org.scala-lang:scala-library:${BuildInfo.scalaVersion}",
-         |          "jar": "$scalaLibJar"
-         |        }
+         |        "org.scala-lang:scala-library:${BuildInfo.scalaVersion}"
          |      ],
          |      "dependsOn": [
          |        "core"
