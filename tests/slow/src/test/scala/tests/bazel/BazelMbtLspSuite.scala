@@ -1,5 +1,8 @@
 package tests.bazel
 
+import scala.concurrent.duration._
+
+import scala.meta.internal.builds.ShellRunner
 import scala.meta.internal.metals.AutoImportBuildKind
 import scala.meta.internal.metals.Configs.JavaSymbolLoaderConfig
 import scala.meta.internal.metals.Configs.ReferenceProviderConfig
@@ -9,6 +12,7 @@ import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.UserConfiguration
 import scala.meta.internal.metals.mbt.MbtBuildServer
 import scala.meta.internal.metals.{BuildInfo => V}
+import scala.meta.io.AbsolutePath
 
 import tests.BaseLspSuite
 import tests.BazelBuildLayout
@@ -18,9 +22,6 @@ import tests.TestHovers
 /**
  * End-to-end: Bazel workspace → MBT import (`bazel query` + `.metals/mbt.json`)
  * → [[MbtBuildServer]] → Scala hover.
- *
- * Runs in the same CI job as [[BazelLspSuite]] (`slow/testOnly -- tests.bazel.*`),
- * which provides Bazel on PATH.
  */
 class BazelMbtLspSuite
     extends BaseLspSuite("bazel-mbt", BazelMbtTestInitializer)
@@ -181,6 +182,16 @@ class BazelMbtLspSuite
        |}
        |""".stripMargin
 
+  private def pinMaven(workspace: AbsolutePath): Unit = {
+    workspace.resolve("maven_install.json").touch()
+    ShellRunner.runSync(
+      List("bazel", "run", "@maven//:pin"),
+      workspace,
+      redirectErrorOutput = false,
+      timeout = 1.minute,
+    )
+  }
+
   test("bazel-import-mbt-server-hover") {
     cleanWorkspace()
     for {
@@ -190,7 +201,8 @@ class BazelMbtLspSuite
           V.scala213,
           bazelVersion,
           mavenDeps,
-        )
+        ),
+        runAdditionalCommands = pinMaven,
       )
       _ <- server.headServer.connectionProvider.buildServerPromise.future
       mbtFile = workspace.resolve(".metals/mbt.json").readText
@@ -317,7 +329,8 @@ class BazelMbtLspSuite
           V.scala213,
           bazelVersion,
           mavenDeps,
-        )
+        ),
+        runAdditionalCommands = pinMaven,
       )
       _ <- server.headServer.connectionProvider.buildServerPromise.future
       mbtFile = workspace.resolve(".metals/mbt.json").readText
@@ -421,7 +434,8 @@ class BazelMbtLspSuite
           V.scala213,
           bazelVersion,
           javaMavenDeps,
-        )
+        ),
+        runAdditionalCommands = pinMaven,
       )
       _ <- server.headServer.connectionProvider.buildServerPromise.future
       mbtFile = workspace.resolve(".metals/mbt.json").readText
@@ -503,7 +517,8 @@ class BazelMbtLspSuite
           V.scala213,
           bazelVersion,
           mavenDeps,
-        )
+        ),
+        runAdditionalCommands = pinMaven,
       )
       _ <- server.headServer.connectionProvider.buildServerPromise.future
       mbtFile = workspace.resolve(".metals/mbt.json").readText

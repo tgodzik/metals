@@ -4,15 +4,12 @@ import java.{util => ju}
 
 import scala.collection.mutable
 
+import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.mbt.MbtBuild
 import scala.meta.internal.metals.mbt.MbtDependencyModule
 import scala.meta.internal.metals.mbt.MbtNamespace
 
-/** How rule targets are grouped into MBT namespaces. */
-sealed abstract class BazelMbtNamespaceMode(val name: String) {
-  def isWorkspace: Boolean
-  def isBuildFile: Boolean
-}
+sealed abstract class BazelMbtNamespaceMode(val name: String)
 
 object BazelMbtNamespaceMode {
   def fromName(
@@ -20,14 +17,8 @@ object BazelMbtNamespaceMode {
   ): Option[BazelMbtNamespaceMode] =
     List(Workspace, BuildFile).find(_.name == name)
 
-  case object Workspace extends BazelMbtNamespaceMode("workspace") {
-    override def isWorkspace: Boolean = true
-    override def isBuildFile: Boolean = false
-  }
-  case object BuildFile extends BazelMbtNamespaceMode("build-file") {
-    override def isWorkspace: Boolean = false
-    override def isBuildFile: Boolean = true
-  }
+  case object Workspace extends BazelMbtNamespaceMode("workspace")
+  case object BuildFile extends BazelMbtNamespaceMode("build-file")
 }
 
 /**
@@ -52,7 +43,7 @@ object BazelMbtBuildSupport {
     val depModules = new ju.ArrayList[MbtDependencyModule]()
     dependencyModules.foreach(depModules.add)
     if (targetLabels.isEmpty) {
-      if (granularity.isWorkspace) {
+      if (granularity == BazelMbtNamespaceMode.Workspace) {
         MbtBuild(
           depModules,
           singleNamespace(workspaceNamespaceName, Set.empty, scalaVersion),
@@ -83,7 +74,7 @@ object BazelMbtBuildSupport {
       }
       val namespaces = new ju.LinkedHashMap[String, MbtNamespace]()
 
-      if (granularity.isBuildFile) {
+      if (granularity == BazelMbtNamespaceMode.BuildFile) {
         val byBuildFile = mutable.Map.empty[String, mutable.Set[String]]
         val scalacOptionsByBuildFile = mutable.Map.empty[String, List[String]]
         val javacOptionsByBuildFile = mutable.Map.empty[String, List[String]]
@@ -151,8 +142,8 @@ object BazelMbtBuildSupport {
       granularity: BazelMbtNamespaceMode,
       ruleLabel: String,
   ): String =
-    if (granularity.isWorkspace) workspaceNamespaceName
-    else if (granularity.isBuildFile) {
+    if (granularity == BazelMbtNamespaceMode.Workspace) workspaceNamespaceName
+    else if (granularity == BazelMbtNamespaceMode.BuildFile) {
       packageKey(ruleLabel).getOrElse(ruleLabel)
     } else {
       ruleLabel
@@ -196,7 +187,7 @@ object BazelMbtBuildSupport {
       keys: Map[String, String],
       targetSet: Set[String],
   ): Map[String, Set[String]] = {
-    if (granularity.isWorkspace) {
+    if (granularity == BazelMbtNamespaceMode.Workspace) {
       Map.empty
     } else {
       val outgoing = mutable.Map.empty[String, mutable.Set[String]]
@@ -221,7 +212,7 @@ object BazelMbtBuildSupport {
       externalDepsByTarget: Map[String, List[String]],
       keys: Map[String, String],
   ): Map[String, Set[String]] = {
-    if (granularity.isWorkspace) {
+    if (granularity == BazelMbtNamespaceMode.Workspace) {
       Map.empty
     } else {
       val outgoing = mutable.Map.empty[String, mutable.Set[String]]
@@ -246,26 +237,16 @@ object BazelMbtBuildSupport {
       dependencyModuleIds: Set[String],
       scalaVersion: Option[String],
   ): Unit = {
-    val srcList = new ju.ArrayList[String]()
-    sources.toSeq.sorted.foreach(srcList.add)
-    val scalacOptionsList = new ju.ArrayList[String]()
-    scalacOptions.distinct.foreach(scalacOptionsList.add)
-    val javacOptionsList = new ju.ArrayList[String]()
-    javacOptions.distinct.foreach(javacOptionsList.add)
-    val dependsList = new ju.ArrayList[String]()
-    dependsOn.toSeq.sorted.foreach(dependsList.add)
-    val depModulesList = new ju.ArrayList[String]()
-    dependencyModuleIds.toSeq.sorted.foreach(depModulesList.add)
     namespaces.put(
       name,
       new MbtNamespace(
-        srcList,
-        scalacOptionsList,
-        javacOptionsList,
-        depModulesList,
+        sources.toSeq.sorted.asJava,
+        scalacOptions.distinct.asJava,
+        javacOptions.distinct.asJava,
+        dependencyModuleIds.toSeq.sorted.asJava,
         scalaVersion.orNull,
         null,
-        dependsList,
+        dependsOn.toSeq.sorted.asJava,
       ),
     )
   }

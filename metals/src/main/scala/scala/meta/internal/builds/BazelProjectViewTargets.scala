@@ -41,12 +41,13 @@ object BazelProjectViewTargets {
         }
       }
       val rest = lines.drop(targetsIdx + 1)
-      for (line <- rest) {
-        if (line.forall(c => c == ' ' || c == '\t')) {
-          ()
-        } else if (line.nonEmpty && !Character.isWhitespace(line.charAt(0))) {
-          return buf.result()
-        } else {
+      val (continuation, _) = rest.span { line =>
+        line.isEmpty ||
+        line.forall(c => c == ' ' || c == '\t') ||
+        Character.isWhitespace(line.charAt(0))
+      }
+      for (line <- continuation) {
+        if (!line.forall(c => c == ' ' || c == '\t')) {
           val p = line.trim
           if (p.nonEmpty && !p.startsWith("#")) {
             buf += p

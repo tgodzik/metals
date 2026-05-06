@@ -162,6 +162,7 @@ abstract class BaseLspSuite(
   def initialize(
       layout: String,
       expectError: Boolean = false,
+      runAdditionalCommands: (AbsolutePath) => Unit = _ => (),
   ): Future[InitializeResult] = {
     Debug.printEnclosing()
     writeLayout(layout)
@@ -174,6 +175,7 @@ abstract class BaseLspSuite(
           "initial commit")
       )
     }
+    runAdditionalCommands(workspace)
     scribe.info(s"Initializing with $initializer")
     initializer.initialize(workspace, server, client, expectError, userConfig)
   }

@@ -6,7 +6,6 @@ import java.nio.file.Path
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.xml.XML
-import scala.meta.internal.metals.MetalsServerConfig
 
 import scala.meta.internal.builds.BazelBuildTool
 import scala.meta.internal.builds.BazelDigest
@@ -50,8 +49,8 @@ abstract class BazelMbtImporter(
     val patterns = BazelProjectViewTargets.patterns(projectRoot)
     for {
       outputBase <- queryOutputBase()
-      dependencyModules <- BazelMavenExtractor
-        .extract(projectRoot, shellRunner, outputBase)
+      dependencyModules = BazelMavenJsonImporter
+        .importMaven(projectRoot, outputBase)
       targets <- runRuleTargetsQuery(patterns)
       _ = scribe.info(s"bazel-mbt: found ${targets.size} targets")
       srcs <- querySrcs(targets)
@@ -121,7 +120,6 @@ abstract class BazelMbtImporter(
 
   override def digest(workspace: AbsolutePath): Option[String] =
     BazelDigest.current(projectRoot)
-  BazelDigest.current(projectRoot)
 
   private val ruleKinds: List[String] =
     List(
@@ -152,7 +150,7 @@ abstract class BazelMbtImporter(
     else {
       runBazelQueryXml(s"set(${targets.mkString(" ")})")
         .map {
-          BazelMbtImporter.srcsFromQueryXml
+          BazelMbtImporter.labelsFromQueryXml(_, "srcs")
         }
     }
 
@@ -162,7 +160,7 @@ abstract class BazelMbtImporter(
     if (targets.isEmpty) Future.successful(Map.empty)
     else {
       runBazelQueryXml(s"set(${targets.mkString(" ")})")
-        .map(BazelMbtImporter.scalacOptionsFromQueryXml)
+        .map(BazelMbtImporter.stringsFromQueryXml(_, "scalacopts"))
     }
 
   private def queryJavacOptions(
@@ -171,7 +169,7 @@ abstract class BazelMbtImporter(
     if (targets.isEmpty) Future.successful(Map.empty)
     else {
       runBazelQueryXml(s"set(${targets.mkString(" ")})")
-        .map(BazelMbtImporter.javacOptionsFromQueryXml)
+        .map(BazelMbtImporter.stringsFromQueryXml(_, "javacopts"))
     }
 
   private def queryDeps(
@@ -344,20 +342,6 @@ abstract class BazelMbtImporter(
 }
 
 object BazelMbtImporter {
-  private[importer] def srcsFromQueryXml(
-      xml: String
-  ): Map[String, List[String]] =
-    labelsFromQueryXml(xml, "srcs")
-
-  private[importer] def scalacOptionsFromQueryXml(
-      xml: String
-  ): Map[String, List[String]] =
-    stringsFromQueryXml(xml, "scalacopts")
-
-  private[importer] def javacOptionsFromQueryXml(
-      xml: String
-  ): Map[String, List[String]] =
-    stringsFromQueryXml(xml, "javacopts")
 
   private[importer] def depsFromQueryXml(
       xml: String
