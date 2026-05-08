@@ -5,7 +5,6 @@ import java.nio.file.Path
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
-import scala.xml.XML
 
 import scala.meta.internal.builds.BazelBuildTool
 import scala.meta.internal.builds.BazelDigest
@@ -37,6 +36,9 @@ abstract class BazelMbtImporter(
 
   override val name: String = "bazel"
 
+  private lazy val queryEnv =
+    BazelQuery.Env(projectRoot, shellRunner, userConfig().javaHome)
+
   override def extract(workspace: AbsolutePath): Future[Unit] =
     selectedNamespaceMode().flatMap(extract(workspace, _))
 
@@ -51,13 +53,20 @@ abstract class BazelMbtImporter(
       outputBase <- queryOutputBase()
       dependencyModules = BazelMavenJsonImporter
         .importMaven(projectRoot, outputBase)
-      targets <- runRuleTargetsQuery(patterns)
+      ruleKindsQueryOutput <- BazelQuery
+        .buildRuleKindsQuery(patterns)
+        .run(queryEnv)
+      targets = asLines(ruleKindsQueryOutput)
       _ = scribe.info(s"bazel-mbt: found ${targets.size} targets")
-      srcs <- querySrcs(targets)
-      scalacOptions <- queryScalacOptions(targets)
-      javacOptions <- queryJavacOptions(targets)
-      deps <- queryDeps(targets.toSet, targets)
-      externalDeps <- queryExternalDeps(targets)
+      targetsXmlQueryOutput <- BazelQuery
+        .fullInformationQuery(targets)
+        .run(queryEnv)
+      targetsXmlDump = new BazelTargetsXmlDump(targetsXmlQueryOutput)
+      srcs = targetsXmlDump.getLabels("srcs")
+      scalacOptions = targetsXmlDump.getStrings("scalacopts")
+      javacOptions = targetsXmlDump.getStrings("javacopts")
+      deps = queryDeps(targets.toSet, targets, targetsXmlDump)
+      externalDeps = targetsXmlDump.externalDepsByTarget(targets)
       externalDepModules = matchExternalDepsToModules(
         externalDeps,
         dependencyModules,
@@ -81,6 +90,9 @@ abstract class BazelMbtImporter(
       _ <- Future(Files.writeString(out.toNIO, MbtBuild.toJson(build)))
     } yield ()
   }
+
+  private def asLines(output: String) =
+    output.linesIterator.map(_.trim).filter(_.nonEmpty).toList
 
   private def selectedNamespaceMode(): Future[BazelMbtNamespaceMode] =
     rememberedNamespaceMode match {
@@ -121,89 +133,15 @@ abstract class BazelMbtImporter(
   override def digest(workspace: AbsolutePath): Option[String] =
     BazelDigest.current(projectRoot)
 
-  private val ruleKinds: List[String] =
-    List(
-      "scala_library", "java_library", "scala_binary", "java_binary",
-      "scala_test", "java_test",
-    )
-
-  private def buildRuleKindsQuery(patterns: List[String]): String = {
-    val ps =
-      if (patterns.isEmpty) BazelProjectViewTargets.defaultPatterns
-      else patterns
-    val parts = for {
-      k <- ruleKinds
-      p <- ps
-    } yield s"kind($k, $p)"
-    parts.mkString(" union ")
-  }
-
-  private def runRuleTargetsQuery(
-      patterns: List[String]
-  ): Future[List[String]] =
-    runBazelQueryLines(buildRuleKindsQuery(patterns))
-
-  private def querySrcs(
-      targets: List[String]
-  ): Future[Map[String, List[String]]] =
-    if (targets.isEmpty) Future.successful(Map.empty)
-    else {
-      runBazelQueryXml(s"set(${targets.mkString(" ")})")
-        .map {
-          BazelMbtImporter.labelsFromQueryXml(_, "srcs")
-        }
-    }
-
-  private def queryScalacOptions(
-      targets: List[String]
-  ): Future[Map[String, List[String]]] =
-    if (targets.isEmpty) Future.successful(Map.empty)
-    else {
-      runBazelQueryXml(s"set(${targets.mkString(" ")})")
-        .map(BazelMbtImporter.stringsFromQueryXml(_, "scalacopts"))
-    }
-
-  private def queryJavacOptions(
-      targets: List[String]
-  ): Future[Map[String, List[String]]] =
-    if (targets.isEmpty) Future.successful(Map.empty)
-    else {
-      runBazelQueryXml(s"set(${targets.mkString(" ")})")
-        .map(BazelMbtImporter.stringsFromQueryXml(_, "javacopts"))
-    }
-
   private def queryDeps(
       targetSet: Set[String],
       orderedTargets: List[String],
-  ): Future[Map[String, List[String]]] =
-    if (orderedTargets.isEmpty) Future.successful(Map.empty)
-    else {
-      runBazelQueryXml(s"set(${orderedTargets.mkString(" ")})")
-        .map { xml =>
-          val depsByTarget = BazelMbtImporter.depsFromQueryXml(xml)
-          orderedTargets.map { target =>
-            target -> depsByTarget.getOrElse(target, Nil).filter(targetSet)
-          }.toMap
-        }
-    }
-
-  private def queryExternalDeps(
-      targets: List[String]
-  ): Future[Map[String, List[String]]] =
-    if (targets.isEmpty) Future.successful(Map.empty)
-    else {
-      runBazelQueryXml(s"deps(set(${targets.mkString(" ")}))")
-        .map { xml =>
-          BazelMbtImporter
-            .reachableLabelsFromQueryXml(xml, targets)
-            .map { case (target, deps) =>
-              target -> deps.filter(isExternalDep)
-            }
-        }
-    }
-
-  private def isExternalDep(label: String): Boolean =
-    label.startsWith("@") && !label.startsWith("@@")
+      targetsXml: BazelTargetsXmlDump,
+  ): Map[String, List[String]] = {
+    orderedTargets.map { target =>
+      target -> targetsXml.depsByTarget.getOrElse(target, Nil).filter(targetSet)
+    }.toMap
+  }
 
   private def matchExternalDepsToModules(
       externalDeps: Map[String, List[String]],
@@ -240,10 +178,10 @@ abstract class BazelMbtImporter(
     withoutDoubleAt.replaceAll("~[^/]+", "")
   }
 
-  private def queryScalaVersionFromDeps(): Future[Option[String]] =
-    runBazelQueryLines(s"filter('scala.library', deps(//...))").map { lines =>
-      lines.flatMap(extractScalaVersionFromLabel).headOption
-    }
+  private def queryScalaVersionFromDeps(): Future[Option[String]] = for {
+    queryOutput <- BazelQuery.allScalaLibrariesQuery.run(queryEnv)
+    lines = asLines(queryOutput)
+  } yield lines.flatMap(extractScalaVersionFromLabel).headOption
 
   private def queryScalaVersion(
       @annotation.nowarn("msg=never used") targets: List[String]
@@ -290,156 +228,4 @@ abstract class BazelMbtImporter(
       }
   }
 
-  private def runBazelQueryLines(query: String): Future[List[String]] =
-    runBazelQueryOutput(query, "label").map { output =>
-      output.linesIterator.map(_.trim).filter(_.nonEmpty).toList
-    }
-
-  private def runBazelQueryXml(query: String): Future[String] =
-    runBazelQueryOutput(query, "xml")
-
-  private def runBazelQueryOutput(
-      query: String,
-      output: String,
-  ): Future[String] = {
-    val buf = new StringBuilder()
-    shellRunner
-      .run(
-        "bazel-mbt-query",
-        List(
-          "bazel",
-          "query",
-          query,
-          s"--output=$output",
-          "--keep_going",
-        ),
-        projectRoot,
-        redirectErrorOutput = false,
-        javaHome = userConfig().javaHome,
-        processOut = line => {
-          buf.append(line)
-          buf.append(System.lineSeparator())
-        },
-        processErr = scribe.warn(_),
-      )
-      .future
-      .flatMap {
-        case ExitCodes.Success =>
-          Future.successful(buf.toString)
-        case ExitCodes.Cancel =>
-          Future.failed(
-            new java.util.concurrent.CancellationException(
-              "bazel-mbt: query cancelled"
-            )
-          )
-        case code =>
-          Future.failed(
-            new Exception(s"bazel-mbt: bazel query failed with exit code $code")
-          )
-      }
-  }
-
-}
-
-object BazelMbtImporter {
-
-  private[importer] def depsFromQueryXml(
-      xml: String
-  ): Map[String, List[String]] = {
-    val root = XML.loadString(xml)
-    val targetLabels = for {
-      rule <- root \\ "rule"
-      target = (rule \ "@name").text
-      if target.nonEmpty
-    } yield {
-      val ruleInputs = for {
-        input <- rule \ "rule-input"
-        value = (input \ "@name").text
-        if value.nonEmpty
-      } yield value
-      val labels = (ruleInputs ++ labelsFromRuleAttribute(rule, None)).distinct
-      target -> labels.toList
-    }
-    targetLabels.toMap
-  }
-
-  private[importer] def reachableLabelsFromQueryXml(
-      xml: String,
-      roots: List[String],
-  ): Map[String, List[String]] = {
-    val adjacency = depsFromQueryXml(xml)
-    roots.map { root =>
-      root -> reachableLabels(root, adjacency).filterNot(_ == root)
-    }.toMap
-  }
-
-  private def labelsFromQueryXml(
-      xml: String,
-      attributeName: String,
-  ): Map[String, List[String]] = {
-    val root = XML.loadString(xml)
-    val targetLabels = for {
-      rule <- root \\ "rule"
-      target = (rule \ "@name").text
-      if target.nonEmpty
-    } yield target -> labelsFromRuleAttribute(rule, Some(attributeName)).toList
-    targetLabels.toMap
-  }
-
-  private def stringsFromQueryXml(
-      xml: String,
-      attributeName: String,
-  ): Map[String, List[String]] = {
-    val root = XML.loadString(xml)
-    val targetLabels = for {
-      rule <- root \\ "rule"
-      target = (rule \ "@name").text
-      if target.nonEmpty
-    } yield target -> stringsFromRuleAttribute(rule, attributeName).toList
-    targetLabels.toMap
-  }
-
-  private def stringsFromRuleAttribute(
-      rule: scala.xml.Node,
-      attributeName: String,
-  ): Seq[String] =
-    for {
-      attribute <- rule \ "_"
-      name = (attribute \ "@name").text
-      if name == attributeName
-      string <- attribute \\ "string"
-      value = (string \ "@value").text
-      if value.nonEmpty
-    } yield value
-
-  private def labelsFromRuleAttribute(
-      rule: scala.xml.Node,
-      attributeName: Option[String],
-  ): Seq[String] =
-    for {
-      attribute <- rule \ "_"
-      name = (attribute \ "@name").text
-      if attributeName.forall(_ == name)
-      label <- attribute \\ "label"
-      value = (label \ "@value").text
-      if value.nonEmpty
-    } yield value
-
-  private def reachableLabels(
-      root: String,
-      adjacency: Map[String, List[String]],
-  ): List[String] = {
-    val seen = scala.collection.mutable.LinkedHashSet.empty[String]
-    val queue = scala.collection.mutable.Queue(root)
-    while (queue.nonEmpty) {
-      val current = queue.dequeue()
-      if (!seen(current)) {
-        seen += current
-        for (dep <- adjacency.getOrElse(current, Nil)) {
-          if (!seen(dep)) queue.enqueue(dep)
-        }
-      }
-    }
-    seen.toList
-  }
 }
