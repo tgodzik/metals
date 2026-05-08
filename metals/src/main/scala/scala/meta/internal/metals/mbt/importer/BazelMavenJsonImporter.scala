@@ -26,23 +26,20 @@ object BazelMavenJsonImporter {
 
   def importMaven(
       projectDir: AbsolutePath,
+      lockFile: Option[AbsolutePath],
       outputBase: Option[Path],
   ): Seq[MbtDependencyModule] = {
-    val mavenInstallPaths =
-      findAllMavenInstallJson(projectDir)
-
-    if (mavenInstallPaths.isEmpty) {
+    lockFile.fold {
       scribe.error(
         "No maven_install.json found. Make sure rules_jvm_external is configured and pinned. You might need to run `REPIN=1 bazel run @maven//:pin`."
       )
       Seq.empty[MbtDependencyModule]
-    } else {
-      val allModules = mavenInstallPaths.flatMap { path =>
-        scribe.debug(s"Processing: $path")
-        val content = path.readText
-        val json = gson.fromJson(content, classOf[JsonObject])
+    } { path =>
+      scribe.debug(s"Processing: $path")
+      val content = path.readText
+      val json = gson.fromJson(content, classOf[JsonObject])
+      val allModules =
         extractArtifacts(json, outputBase.map(AbsolutePath.apply), projectDir)
-      }
 
       allModules
         .groupBy(_.id)
@@ -54,71 +51,6 @@ object BazelMavenJsonImporter {
         .sortBy(_.id)
     }
 
-  }
-
-  /**
-   * Find all maven_install.json files in various possible locations.
-   * Also searches for patterns like maven_install_*.json, *_maven_install.json,
-   * and parses MODULE.bazel/WORKSPACE files to find custom lock_file paths.
-   */
-  private def findAllMavenInstallJson(
-      projectDir: AbsolutePath
-  ): Set[AbsolutePath] = {
-    val candidates = Seq(
-      // Standard location
-      projectDir.resolve("maven_install.json"),
-      // Bzlmod repository rule output (common pattern)
-      projectDir.resolve("third_party/maven_install.json"),
-      // Some projects put it in a subdirectory
-      projectDir.resolve("dependencies/maven_install.json"),
-      // Compatibility subdirectory
-      projectDir.resolve("compatibility/maven_install.json"),
-    )
-
-    // Search for maven_install*.json or *maven*install*.json patterns in project root
-    val patternMatches = Try {
-      projectDir.list.filter { path =>
-        val name = path.filename.toLowerCase
-        name.endsWith(".json") && name.contains("maven") && name.contains(
-          "install"
-        )
-      }.toSeq
-    }.getOrElse(Seq.empty)
-
-    // Find lock_file paths from MODULE.bazel or WORKSPACE files
-    val lockFilePaths = findLockFileFromBazelConfig(projectDir)
-
-    val allCandidates =
-      (candidates ++ patternMatches ++ lockFilePaths).distinct
-        .filter(_.exists)
-
-    scribe.debug(
-      s"Found maven_install.json files: ${allCandidates.mkString(", ")}"
-    )
-
-    allCandidates.toSet.filter(_.exists)
-  }
-
-  /**
-   * Parse MODULE.bazel and WORKSPACE files to find lock_file parameter
-   * in maven.install or maven_install calls.
-   *
-   * Examples of patterns matched:
-   * - maven.install(lock_file = "//:maven_install.json")
-   * - maven.install(lock_file = "//third_party:maven_install.json")
-   * - maven_install(lock_file = "@//:custom_maven.json")
-   */
-  private def findLockFileFromBazelConfig(
-      projectDir: AbsolutePath
-  ): Seq[AbsolutePath] = {
-    val configFiles = possibleConfigFiles(projectDir)
-
-    configFiles.flatMap { configFile =>
-      Try {
-        val content = configFile.readText
-        extractLockFilePaths(content, projectDir)
-      }.getOrElse(Seq.empty)
-    }
   }
 
   /**
@@ -161,74 +93,6 @@ object BazelMavenJsonImporter {
       projectDir.resolve("WORKSPACE"),
       projectDir.resolve("WORKSPACE.bazel"),
     ).filter(_.exists)
-  }
-
-  /**
-   * Extract lock_file paths from Bazel configuration content.
-   * Handles various formats:
-   * - lock_file = "//:maven_install.json"
-   * - lock_file = "//third_party:maven_install.json"
-   * - lock_file = "@//:maven_install.json"
-   * - lock_file="//:file.json" (no spaces)
-   */
-  private def extractLockFilePaths(
-      content: String,
-      projectDir: AbsolutePath,
-  ): Seq[AbsolutePath] = {
-    // Pattern to match lock_file parameter in maven.install or maven_install calls
-    // Matches: lock_file = "..." or lock_file="..."
-    val lockFilePattern =
-      """lock_file\s*=\s*"([^"]+)"""".r
-
-    lockFilePattern
-      .findAllMatchIn(content)
-      .flatMap { m =>
-        val lockFilePath = m.group(1)
-        bazelLabelToPath(lockFilePath, projectDir)
-      }
-      .toSeq
-  }
-
-  /**
-   * Convert a Bazel label to a filesystem path.
-   *
-   * Handles formats:
-   * - "//:maven_install.json" -> projectDir/maven_install.json
-   * - "//third_party:maven_install.json" -> projectDir/third_party/maven_install.json
-   * - "@//:maven_install.json" -> projectDir/maven_install.json (strip @)
-   * - "maven_install.json" -> projectDir/maven_install.json (simple filename)
-   */
-  private def bazelLabelToPath(
-      label: String,
-      projectDir: AbsolutePath,
-  ): Option[AbsolutePath] = {
-    Try {
-      val cleanLabel = label.stripPrefix("@")
-
-      if (cleanLabel.startsWith("//")) {
-        // Bazel label format: //package:target
-        val withoutPrefix = cleanLabel.stripPrefix("//")
-        val (packagePath, target) =
-          if (withoutPrefix.contains(":")) {
-            val parts = withoutPrefix.split(":", 2)
-            (parts(0), parts(1))
-          } else {
-            ("", withoutPrefix)
-          }
-
-        if (packagePath.isEmpty)
-          Some(projectDir.resolve(target))
-        else
-          Some(projectDir.resolve(packagePath).resolve(target))
-      } else if (cleanLabel.contains(":")) {
-        // Simple package:target format without //
-        val parts = cleanLabel.split(":", 2)
-        Some(projectDir.resolve(parts(0)).resolve(parts(1)))
-      } else {
-        // Simple filename
-        Some(projectDir.resolve(cleanLabel))
-      }
-    }.toOption.flatten
   }
 
   /**

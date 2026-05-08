@@ -1,6 +1,7 @@
 package scala.meta.internal.metals.mbt.importer
 
 import scala.xml.XML
+import scala.meta.io.AbsolutePath
 class BazelTargetsXmlDump(xmlDump: String) {
 
   private lazy val root = XML.loadString(xmlDump)
@@ -99,5 +100,24 @@ class BazelTargetsXmlDump(xmlDump: String) {
       value = (string \ "@value").text
       if value.nonEmpty
     } yield value
+
+}
+
+class MavenLockFileXmlDump(xmlDump: String) {
+
+  private lazy val root = XML.loadString(xmlDump)
+
+  lazy val lockFileLocation: Option[AbsolutePath] = {
+    (for {
+      sourceFile <- root \\ "source-file"
+      location = (sourceFile \ "@location").text
+    } yield {
+      // This removes the line and column number,
+      // e.g. '/private/var/tmp/_bazel_user/.../unsorted_deps.json:1:1'
+      // TODO consider passing --noxml:line_numbers to Bazel instead
+      val cleaned = location.replaceAll(":\\d+:\\d+$", "")
+      AbsolutePath(cleaned)
+    }).headOption
+  }
 
 }

@@ -51,8 +51,12 @@ abstract class BazelMbtImporter(
     val patterns = BazelProjectViewTargets.patterns(projectRoot)
     for {
       outputBase <- queryOutputBase()
+      mavenLockFileXml <- BazelQuery.mavenLockFileQuery.run(queryEnv)
+      mavenLockFile = new MavenLockFileXmlDump(
+        mavenLockFileXml
+      ).lockFileLocation
       dependencyModules = BazelMavenJsonImporter
-        .importMaven(projectRoot, outputBase)
+        .importMaven(projectRoot, mavenLockFile, outputBase)
       ruleKindsQueryOutput <- BazelQuery
         .buildRuleKindsQuery(patterns)
         .run(queryEnv)

@@ -35,6 +35,14 @@ object BazelQuery {
   def allScalaLibrariesQuery: BazelQuery =
     BazelQuery("filter('scala.library', deps(//...))", outputMode = "label")
 
+  // NB. The Bazel call will fail if the project doesn't have the @maven repository.
+  // Not sure if we need to catch this.
+  def mavenLockFileQuery: BazelQuery =
+    BazelQuery(
+      "filter('unsorted_deps.json', deps(@maven//:pin))",
+      outputMode = "xml",
+    )
+
   private val ruleKinds: List[String] =
     List(
       "scala_library", "java_library", "scala_binary", "java_binary",
