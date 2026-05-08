@@ -4,6 +4,7 @@ import java.net.URI
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.ArrayList
+import java.{util => ju}
 import javax.annotation.Nullable
 
 import scala.util.control.NonFatal
@@ -14,12 +15,15 @@ case class MbtDependencyModule(
     @Nullable id: String, // e.g. "com.google.guava:guava:30.0-jre"
     @Nullable jar: String, // URI string, e.g. "file:///path/to/jar.jar"
     @Nullable sources: String, // URI string, e.g. "file:///path/to/jar-sources.jar"
+    @Nullable annotationProcessors: ju.List[String] = null,
 ) {
 
   def jarUri: Option[URI] = Option(jar).map(MbtDependencyModule.parseUri)
   def jarPath: Option[Path] = jarUri.map(Paths.get)
   def sourcesURI: Option[URI] =
     Option(sources).map(MbtDependencyModule.parseUri)
+  def getAnnotationProcessors: ju.List[String] =
+    Option(annotationProcessors).getOrElse(ju.Collections.emptyList())
   private def idParts: Array[String] = id.split(":", 3)
   def isValid: Boolean = idParts.length == 3
   def organization: String =

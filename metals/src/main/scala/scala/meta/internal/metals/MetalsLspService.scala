@@ -339,6 +339,7 @@ abstract class MetalsLspService(
     onIndexingDone = restartFallbackCompilers,
     javaSymbolLoader = () => userConfig.javaSymbolLoader,
     fallbackClasspaths = () => compilers.fallbackClasspaths,
+    mbtBuild = () => mbtBuild,
     sleeper = sleeper,
     turbineRecompileDelay = () => userConfig.javaTurbineRecompileDelay,
     indexFilters = List(

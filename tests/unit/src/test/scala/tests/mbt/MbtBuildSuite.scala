@@ -7,6 +7,7 @@ import scala.meta.internal.metals.BuildInfo
 import scala.meta.internal.metals.JsonParser.XtensionSerializableToJson
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.ScalaVersionSelector
+import scala.meta.internal.metals.mbt.MbtAnnotationProcessingOptions
 import scala.meta.internal.metals.mbt.MbtBuild
 import scala.meta.internal.metals.mbt.MbtBuildServer
 import scala.meta.io.AbsolutePath
@@ -121,6 +122,66 @@ class MbtBuildSuite extends tests.BaseSuite {
     assertEquals(
       extraTarget.getDependencies.asScala.map(_.getUri).toSeq.sorted,
       Seq("mbt://namespace/core"),
+    )
+  }
+
+  test("annotation-processing-options") {
+    val dir = Files.createTempDirectory("mbt-ap")
+    val f = dir.resolve("mbt.json")
+    val processorJar = Files.createFile(dir.resolve("processor.jar"))
+    val processorJarUri = processorJar.toUri.toString
+    val initialContent =
+      s"""|{
+          |  "dependencyModules": [
+          |    {
+          |      "id": "com.example:processor:1.0.0",
+          |      "jar": "$processorJarUri",
+          |      "annotationProcessors": [
+          |        "com.example.GenerateProcessor"
+          |      ]
+          |    }
+          |  ],
+          |  "namespaces": {
+          |    "core": {
+          |      "sources": [
+          |        "./src"
+          |      ],
+          |      "javacOptions": [
+          |        "-processor",
+          |        "com.example.OptionProcessor",
+          |        "-processorpath",
+          |        "${processorJar.toString}",
+          |        "-Aexample"
+          |      ],
+          |      "dependencyModules": [
+          |        "com.example:processor:1.0.0"
+          |      ]
+          |    }
+          |  }
+          |}
+          |""".stripMargin
+    Files.writeString(f, initialContent)
+    val build = MbtBuild.fromFile(f)
+
+    val prettyGson = new GsonBuilder().setPrettyPrinting().create()
+    assertNoDiff(prettyGson.toJson(build.toJsonObject), initialContent)
+
+    val options = MbtAnnotationProcessingOptions.fromBuild(build)
+    assert(options.isEnabled)
+    assertEquals(options.processorPath, Seq(processorJar))
+    assertEquals(
+      options.processors,
+      Seq("com.example.OptionProcessor", "com.example.GenerateProcessor"),
+    )
+    assertEquals(
+      options.javacOptions,
+      Seq(
+        "-processor",
+        "com.example.OptionProcessor",
+        "-processorpath",
+        processorJar.toString,
+        "-Aexample",
+      ),
     )
   }
 

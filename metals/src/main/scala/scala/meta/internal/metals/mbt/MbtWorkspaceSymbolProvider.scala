@@ -100,6 +100,7 @@ class MbtWorkspaceSymbolProvider(
       JavaSymbolLoaderConfig.default,
     fallbackClasspaths: () => BaseFallbackClasspaths = () =>
       EmptyFallbackClasspaths,
+    mbtBuild: () => MbtBuild = () => MbtBuild.empty,
     sleeper: Sleeper = Sleeper.TestingSleeper,
     turbineRecompileDelay: () => TurbineRecompileDelayConfig = () =>
       TurbineRecompileDelayConfig.fromConfig(None),
@@ -139,6 +140,7 @@ class MbtWorkspaceSymbolProvider(
           toInput(file)
             .map(input => new SourceFile(file.toString(), input.text)),
       () => fallbackClasspaths().javaCompilerClasspath(),
+      () => MbtAnnotationProcessingOptions.fromBuild(mbtBuild()),
       progress,
       // We don't need to re-compile the workspace super regularly because we can
       // load recently changed files from the sourcepath.

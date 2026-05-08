@@ -35,6 +35,7 @@ import com.google.turbine.binder.Processing
 import com.google.turbine.diag.SourceFile
 import com.google.turbine.diag.TurbineLog
 import com.google.turbine.lower.Lower
+import com.google.turbine.options.LanguageVersion
 import com.google.turbine.parse.Parser
 import com.google.turbine.tree.Tree
 
@@ -49,13 +50,14 @@ object TurbineCompiler {
       toParse: ParArray[T],
       toSourceFile: T => Option[SourceFile],
       classpath: Seq[Path],
+      annotationProcessing: MbtAnnotationProcessingOptions,
       progressBars: ProgressBars,
   )(implicit rc: ReportContext): TurbineCompileResult = {
     val bar =
       progressBars.start(new ProgressBars.StartProgressBarParams("Outlining"))
     try {
       val units = parseInputs(toParse, toSourceFile)
-      compileClassfilesInternal(units, classpath)
+      compileClassfilesInternal(units, classpath, annotationProcessing)
     } catch {
       case NonFatal(e) =>
         PcQueryContext(None, () => classpath.mkString("\n"))
@@ -90,15 +92,34 @@ object TurbineCompiler {
   private def compileClassfilesInternal(
       units: ImmutableList[Tree.CompUnit],
       classpath: Seq[Path],
+      annotationProcessing: MbtAnnotationProcessingOptions,
   ): TurbineCompileResult = {
     val log = new TurbineLog()
     val boundClasspath =
       ClassPathBinder.bindClasspath(validClasspaths(classpath).asJava)
+    val processorInfo =
+      if (annotationProcessing.isEnabled) {
+        val javacOptions =
+          ImmutableList.copyOf(annotationProcessing.javacOptions.asJava)
+        Processing.initializeProcessors(
+          LanguageVersion.fromJavacopts(javacOptions).sourceVersion(),
+          javacOptions,
+          ImmutableSet.copyOf(annotationProcessing.processors.asJava),
+          Processing.processorLoader(
+            ImmutableList.copyOf(
+              annotationProcessing.processorPath.map(_.toString).asJava
+            ),
+            ImmutableSet.of(),
+          ),
+        )
+      } else {
+        Processing.ProcessorInfo.empty()
+      }
     val result = Binder.bind(
       log,
       units,
       boundClasspath,
-      Processing.ProcessorInfo.empty(),
+      processorInfo,
       JimageClassBinder.bindDefault(),
       Optional.empty(),
     )
@@ -129,6 +150,7 @@ class TurbineCompiler[T](
     allCompilationUnits: () => ParArray[T],
     parseUnit: T => Option[SourceFile],
     classpath: () => Seq[Path],
+    annotationProcessingOptions: () => MbtAnnotationProcessingOptions,
     progressBars: ProgressBars,
     debounceDelay: FiniteDuration,
     listProtoJavaOutlinesForPackage: String => Iterator[JavaFileObject],
@@ -189,6 +211,7 @@ class TurbineCompiler[T](
       allCompilationUnits(),
       parseUnit,
       classpath(),
+      annotationProcessingOptions(),
       progressBars,
     )
     cleanup()
