@@ -372,42 +372,43 @@ class Compilers(
       changedFiles => {
         for {
           _ <- sh.sleep(diagnosticsDebouncerDelay)
-          futures = for {
-            file <- changedFiles.distinct
-            pc <- this.loadCompiler(file).toList
-            contents <- buffers.get(file).toList
-          } yield {
-            val token = new CompletableCancelToken()
-            inFlightDidChange.put(file, token).foreach { old =>
-              old.cancel()
+          futures =
+            for {
+              file <- changedFiles.distinct
+              pc <- this.loadCompiler(file).toList
+              contents <- buffers.get(file).toList
+            } yield {
+              val token = new CompletableCancelToken()
+              inFlightDidChange.put(file, token).foreach { old =>
+                old.cancel()
+              }
+              val params = CompilerVirtualFileParams(
+                file.toNIO.toUri,
+                contents,
+                token = token,
+                shouldReturnDiagnostics =
+                  userConfig().presentationCompilerDiagnostics,
+              )
+              timerProvider
+                .withTimer(
+                  "computed diagnostics",
+                  reportStatus = false,
+                  onlyIf = false,
+                ) {
+                  pc.didChange(params).asScala
+                }
+                .map { case (timer, reportedDiagnostics) =>
+                  diagnostics.publishDiagnosticsNotAdjusted(
+                    file,
+                    reportedDiagnostics.asScala.toList,
+                  )
+                  metrics.recordEvent(
+                    Event
+                      .duration("diagnostics", timer.elapsed)
+                      .withLanguage(file.toJLanguage)
+                  )
+                }
             }
-            val params = CompilerVirtualFileParams(
-              file.toNIO.toUri,
-              contents,
-              token = token,
-              shouldReturnDiagnostics =
-                userConfig().presentationCompilerDiagnostics,
-            )
-            timerProvider
-              .withTimer(
-                "computed diagnostics",
-                reportStatus = false,
-                onlyIf = false,
-              ) {
-                pc.didChange(params).asScala
-              }
-              .map { case (timer, reportedDiagnostics) =>
-                diagnostics.publishDiagnosticsNotAdjusted(
-                  file,
-                  reportedDiagnostics.asScala.toList,
-                )
-                metrics.recordEvent(
-                  Event
-                    .duration("diagnostics", timer.elapsed)
-                    .withLanguage(file.toJLanguage)
-                )
-              }
-          }
           _ <- Future.sequence(futures)
         } yield ()
       },

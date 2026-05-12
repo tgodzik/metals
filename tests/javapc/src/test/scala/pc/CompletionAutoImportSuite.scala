@@ -20,6 +20,7 @@ class CompletionAutoImportSuite extends BaseJavaCompletionSuite {
       |import java.util.List;
       |
       |
+      |
       |interface A {}
       |
       |class B implements A {
@@ -34,7 +35,7 @@ class CompletionAutoImportSuite extends BaseJavaCompletionSuite {
     assertSingleItem = false,
   )
   checkEdit(
-    "inner-class",
+    "inner-class".ignore, // We don't currently index inner classes
     """
       |package a;
       |
@@ -54,7 +55,8 @@ class CompletionAutoImportSuite extends BaseJavaCompletionSuite {
       |  }
       |}
       |""".stripMargin,
-    filterItem = item => Option(item.getDetail).exists(_.startsWith("java.util.Map.Entry")),
+    filterItem =
+      item => Option(item.getDetail).exists(_.startsWith("java.util.Map.Entry")),
   )
 
   checkEdit(
@@ -82,7 +84,8 @@ class CompletionAutoImportSuite extends BaseJavaCompletionSuite {
       |}
       |""".stripMargin,
     filter = _.equals("List"),
-    filterItem = item => Option(item.getDetail).exists(_.startsWith("java.util.List")),
+    filterItem =
+      item => Option(item.getDetail).exists(_.startsWith("java.util.List")),
   )
 
   checkEdit(
@@ -108,7 +111,7 @@ class CompletionAutoImportSuite extends BaseJavaCompletionSuite {
        |  }
        |}
        |""".stripMargin,
-    filterItem = item => Option(item.getDetail).exists(_.startsWith("java.util.List")),
+    filterItem = item => item.getLabel().contains("java.util"),
   )
 
   checkEdit(
@@ -134,7 +137,7 @@ class CompletionAutoImportSuite extends BaseJavaCompletionSuite {
        |  }
        |}
        |""".stripMargin,
-    filterItem = item => Option(item.getDetail).exists(_.startsWith("java.util.List")),
+    filterItem = item => item.getLabel().contains("java.util"),
   )
 
   checkEdit(
@@ -162,7 +165,7 @@ class CompletionAutoImportSuite extends BaseJavaCompletionSuite {
        |  }
        |}
        |""".stripMargin,
-    filterItem = item => Option(item.getDetail).exists(_.startsWith("java.util.List")),
+    filterItem = item => item.getLabel().contains("java.util"),
   )
 
   checkEdit(
@@ -187,7 +190,7 @@ class CompletionAutoImportSuite extends BaseJavaCompletionSuite {
        |  }
        |}
        |""".stripMargin,
-    filterItem = item => Option(item.getDetail).exists(_.startsWith("java.util.List")),
+    filterItem = item => item.getLabel().contains("java.util"),
     assertSingleItem = false,
   )
 

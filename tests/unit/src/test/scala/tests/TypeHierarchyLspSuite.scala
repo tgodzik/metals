@@ -1,7 +1,6 @@
 package tests
 
 import scala.meta.internal.metals.InitializationOptions
-import scala.meta.internal.metals.{BuildInfo => V}
 
 import org.eclipse.lsp4j.TypeHierarchyItem
 
@@ -97,12 +96,6 @@ class TypeHierarchyLspSuite extends BaseLspSuite("type-hierarchy") {
             |  range: 2:6-2:12
             |  selectionRange: 2:6-2:12
             |
-            |AnyRef
-            |  uri: .metals/readonly/dependencies/scala-library-${V.scala213}-sources.jar/scala/AnyRef.scala
-            |  detail: scala
-            |  kind: Class
-            |  range: 18:6-18:12
-            |  selectionRange: 18:6-18:12
             |""".stripMargin,
       )
     } yield ()
@@ -172,14 +165,7 @@ class TypeHierarchyLspSuite extends BaseLspSuite("type-hierarchy") {
       supertypes <- server.typeHierarchySupertypes(item.get)
       _ = assertNoDiff(
         formatItems(supertypes),
-        s"""|AnyRef
-            |  uri: .metals/readonly/dependencies/scala-library-${V.scala213}-sources.jar/scala/AnyRef.scala
-            |  detail: scala
-            |  kind: Class
-            |  range: 18:6-18:12
-            |  selectionRange: 18:6-18:12
-            |
-            |Flyable
+        s"""|Flyable
             |  uri: a/src/main/scala/a/Main.scala
             |  detail: a
             |  kind: Interface

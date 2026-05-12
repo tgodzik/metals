@@ -7,6 +7,7 @@ import scala.jdk.CollectionConverters._
 
 import scala.meta.internal.builds.BazelBuildTool
 import scala.meta.internal.builds.BazelDigest
+import scala.meta.internal.builds.ShellRunner
 import scala.meta.internal.metals.DebugDiscoveryParams
 import scala.meta.internal.metals.EmptyWorkDoneProgress
 import scala.meta.internal.metals.JsonParser._

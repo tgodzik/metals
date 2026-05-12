@@ -335,9 +335,9 @@ class CompletionDapSuite
   assertCompletion(
     "completion-with-auto-import",
     expression = "ListBuff@@",
-    expectedCompletions = "",
-    expectedEdit = "",
-    noResults = true,
+    expectedCompletions = "ListBuffer - scala.collection.mutable",
+    expectedEdit = "ListBuffer",
+    noResults = false,
   )(
     """|/a/src/main/scala/a/Main.scala
        |package a

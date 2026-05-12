@@ -114,34 +114,34 @@ final class WorkspaceSymbolProvider(
       target: Option[BuildTargetIdentifier],
       kind: ju.Optional[MemberKind] = ju.Optional.empty(),
   ): (SymbolSearch.Result, Int) = {
-      // the mbt-based index still doesn't support buildtarget-based search
-      // so we fallback to the non-mbt index for those queries.
-      if (target.isEmpty && userConfig().workspaceSymbolProvider.isMBT) {
-          mbtWorkspaceSymbolProvider.workspaceSymbolSearch(
-          MbtWorkspaceSymbolSearchParams(
-            query.query,
-            target.fold("")(_.getUri),
-          ),
-          visitor,
-        )
-        val (res, inDepsCount) = inDependencies.search(query, visitor)
-        (res, inDepsCount)
+    // the mbt-based index still doesn't support buildtarget-based search
+    // so we fallback to the non-mbt index for those queries.
+    if (target.isEmpty && userConfig().workspaceSymbolProvider.isMBT) {
+      mbtWorkspaceSymbolProvider.workspaceSymbolSearch(
+        MbtWorkspaceSymbolSearchParams(
+          query.query,
+          target.fold("")(_.getUri),
+        ),
+        visitor,
+      )
+      val (res, inDepsCount) = inDependencies.search(query, visitor)
+      (res, inDepsCount)
+    } else {
+      if (kind.isPresent) {
+        val typeCount = workspaceToplevelSearch(query, visitor, kind)
+        (SymbolSearch.Result.COMPLETE, typeCount)
       } else {
         if (kind.isPresent) {
           val typeCount = workspaceToplevelSearch(query, visitor, kind)
           (SymbolSearch.Result.COMPLETE, typeCount)
         } else {
-          if (kind.isPresent) {
-            val typeCount = workspaceToplevelSearch(query, visitor, kind)
-            (SymbolSearch.Result.COMPLETE, typeCount)
-          } else {
-            val workspaceCount = workspaceSearch(query, visitor, target)
-            val typeCount = workspaceToplevelSearch(query, visitor, kind)
-            val (res, inDepsCount) = inDependencies.search(query, visitor)
-            (res, workspaceCount + inDepsCount + typeCount)
-          }
+          val workspaceCount = workspaceSearch(query, visitor, target)
+          val typeCount = workspaceToplevelSearch(query, visitor, kind)
+          val (res, inDepsCount) = inDependencies.search(query, visitor)
+          (res, workspaceCount + inDepsCount + typeCount)
         }
       }
+    }
   }
 
   def searchMethods(
