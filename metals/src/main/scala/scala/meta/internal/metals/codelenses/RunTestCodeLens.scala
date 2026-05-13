@@ -93,9 +93,11 @@ final class RunTestCodeLens(
       .distinct
     val lenses = for {
       buildTargetId <- targetIds
-      if canActuallyCompile(buildTargetId, diagnostics)
       buildTarget <- buildTargets.info(buildTargetId)
-      if buildTarget.getCapabilities().getCanDebug()
+      capabilities = buildTarget.getCapabilities
+      if Option(capabilities.getCanDebug).exists(_.booleanValue) ||
+        Option(capabilities.getCanRun).exists(_.booleanValue)
+      if canActuallyCompile(buildTargetId, diagnostics)
       isJVM = buildTarget.asScalaBuildTarget.forall(
         _.getPlatform == b.ScalaPlatform.JVM
       )
