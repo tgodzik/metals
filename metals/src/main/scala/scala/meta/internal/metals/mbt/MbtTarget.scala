@@ -82,10 +82,9 @@ case class MbtTarget(
       ju.Collections.emptyList(),
     )
     val jvmBt = new bsp4j.JvmBuildTarget()
-    val javaPath = Paths.get(javaHome.getOrElse(Properties.javaHome))
-    jvmBt.setJavaHome(
-      javaPath.toUri().toString()
-    )
+    val javaHomeUri = javaHome
+      .getOrElse(Paths.get(Properties.javaHome).toUri().toString())
+    jvmBt.setJavaHome(javaHomeUri)
     scalaTarget.setJvmBuildTarget(jvmBt)
 
     val target = new bsp4j.BuildTarget(
