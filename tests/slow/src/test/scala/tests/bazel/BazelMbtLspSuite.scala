@@ -182,6 +182,42 @@ class BazelMbtLspSuite
        |}
        |""".stripMargin
 
+  private def filegroupBazelWorkspaceLayout: String =
+    """|/.bazelproject
+       |targets:
+       |    //...
+       |
+       |/lib/BUILD
+       |load("@rules_scala//scala:scala.bzl", "scala_library")
+       |
+       |filegroup(
+       |    name = "library_sources",
+       |    srcs = [
+       |        "Library.scala",
+       |        "More.scala",
+       |    ],
+       |)
+       |
+       |scala_library(
+       |    name = "library",
+       |    srcs = [":library_sources"],
+       |)
+       |
+       |/lib/Library.scala
+       |package lib
+       |
+       |class Library {
+       |  def message: String = "hello"
+       |}
+       |
+       |/lib/More.scala
+       |package lib
+       |
+       |class More {
+       |  def library = new Library().message
+       |}
+       |""".stripMargin
+
   private def pinMaven(workspace: AbsolutePath): Unit = {
     workspace.resolve("maven_install.json").touch()
     ShellRunner.runSync(
@@ -310,6 +346,40 @@ class BazelMbtLspSuite
            |res0: Option[Int] = Some(3)
            |```
            |""".stripMargin.hover,
+      )
+    } yield ()
+  }
+
+  test("bazel-import-mbt-filegroup-srcs") {
+    cleanWorkspace()
+    for {
+      _ <- initialize(
+        BazelBuildLayout(
+          filegroupBazelWorkspaceLayout,
+          V.scala213,
+          bazelVersion,
+        )
+      )
+      _ <- server.headServer.connectionProvider.buildServerPromise.future
+      mbtFile = workspace.resolve(".metals/mbt.json").readText
+      _ = assertNoDiff(
+        escapeMbtFile(mbtFile),
+        s"""|{
+            |  "dependencyModules": [],
+            |  "namespaces": {
+            |    "//lib": {
+            |      "sources": [
+            |        "lib/Library.scala",
+            |        "lib/More.scala"
+            |      ],
+            |      "scalacOptions": [],
+            |      "javacOptions": [],
+            |      "dependencyModules": [],
+            |      "scalaVersion": "2.13.18",
+            |      "dependsOn": []
+            |    }
+            |  }
+            |}""".stripMargin,
       )
     } yield ()
   }

@@ -454,6 +454,7 @@ case class Indexer(indexProviders: IndexProviders, mbtBuild: () => MbtBuild)(
     val sourcesToIndex = mutable.ArrayBuffer.empty[SourceToIndex]
     for {
       (sourceItem, targets) <- data.sourceItemsToBuildTarget
+      if sourceItem.exists
       source <- sourceItem.listRecursiveOrJar
       if source.isScalaOrJava
     } {
