@@ -24,9 +24,13 @@ final case class ExtractorConfig(
     gradleInstallation: Option[File] = None,
     gradleUserHome: Option[File] = None,
     /**
-     * Java home that the Gradle daemon should run on. When unset the daemon
-     * inherits the client's JVM, which can be a problem when the client JVM
-     * is newer than the version the daemon's bytecode toolchain understands.
+     * Path to a JDK installation that the Gradle daemon should use (passed
+     * directly to [[org.gradle.tooling.ConfigurableLauncher#setJavaHome]]).
+     * Must point to a full JDK directory (i.e. one that contains `bin/javac`),
+     * not a bare JRE; Gradle requires compiler tooling at runtime. When unset
+     * the daemon inherits the client's JVM, which can be a problem when the
+     * client JVM is newer than the version the daemon's bytecode toolchain
+     * understands.
      */
     gradleJvm: Option[File] = None,
     verbose: Boolean = false,

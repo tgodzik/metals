@@ -188,6 +188,7 @@ class BazelMbtLspSuite
   }
 
   test("bazel-import-mbt-server-hover") {
+    client.selectedServer = Messages.ChooseBuildServer.mbt
     cleanWorkspace()
     for {
       _ <- initialize(
@@ -310,6 +311,7 @@ class BazelMbtLspSuite
   }
 
   test("bazel-import-mbt-single-target") {
+    client.selectedServer = Messages.ChooseBuildServer.mbt
     cleanWorkspace()
     for {
       _ <- initialize(
@@ -421,6 +423,7 @@ class BazelMbtLspSuite
   }
 
   test("bazel-import-mbt-java-workspace") {
+    client.selectedServer = Messages.ChooseBuildServer.mbt
     cleanWorkspace()
     for {
       _ <- initialize(
@@ -502,6 +505,7 @@ class BazelMbtLspSuite
   }
 
   test("bazel-import-mbt-workspace-namespace-choice") {
+    client.selectedServer = Messages.ChooseBuildServer.mbt
     cleanWorkspace()
     client.chooseBazelMbtNamespaceMode =
       Messages.BazelMbtNamespaceChoice.workspace

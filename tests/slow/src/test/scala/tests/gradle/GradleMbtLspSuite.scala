@@ -6,6 +6,7 @@ import scala.meta.internal.metals.AutoImportBuildKind
 import scala.meta.internal.metals.Configs.JavaSymbolLoaderConfig
 import scala.meta.internal.metals.Configs.ReferenceProviderConfig
 import scala.meta.internal.metals.Configs.WorkspaceSymbolProviderConfig
+import scala.meta.internal.metals.Messages
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.UserConfiguration
 import scala.meta.internal.metals.mbt.MbtBuildServer
@@ -34,6 +35,7 @@ class GradleMbtLspSuite
     )
 
   test("basic") {
+    client.selectedServer = Messages.ChooseBuildServer.mbt
     cleanWorkspace()
     for {
       _ <- initialize(

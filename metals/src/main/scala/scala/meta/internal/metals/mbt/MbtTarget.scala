@@ -83,6 +83,10 @@ case class MbtTarget(
     )
     val jvmBt = new bsp4j.JvmBuildTarget()
     val javaHomeUri = javaHome
+      .map {
+        case home if home.startsWith("file://") => home
+        case home => Paths.get(home).toUri().toString()
+      }
       .getOrElse(Paths.get(Properties.javaHome).toUri().toString())
     jvmBt.setJavaHome(javaHomeUri)
     scalaTarget.setJvmBuildTarget(jvmBt)

@@ -2,6 +2,7 @@ package gradleinfo
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.logging.Level
 import java.util.logging.Logger
 
 import scala.util.control.NonFatal
@@ -27,7 +28,7 @@ class GradleInfoExtractorImpl extends MbtExtractor {
     Files.writeString(outputFile, json)
   } catch {
     case NonFatal(e) =>
-      logger.severe(s"Error extracting Gradle info: ${e.getMessage}")
-      e.printStackTrace()
+      logger.log(Level.SEVERE, "Error extracting Gradle info", e)
+      throw e
   }
 }
