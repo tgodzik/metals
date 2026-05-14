@@ -13,7 +13,7 @@ object V {
 
   val scala3ForSBT2 = "3.7.4"
 
-  val latestScala3Next = "3.8.2"
+  val latestScala3Next = "3.8.3"
 
   // When you can add to removedScalaVersions in MtagsResolver.scala with the last released version
   val sbtScala = "2.12.21"
@@ -57,11 +57,11 @@ object V {
 
   val mavenBloop = "2.0.3"
 
-  val mill = "1.1.2"
+  val mill = "1.1.3"
 
   val mdoc = "2.8.2"
 
-  val munit = "1.2.3"
+  val munit = "1.2.4"
 
   val modelContextProtocol = "1.0.0"
 
@@ -71,7 +71,7 @@ object V {
 
   val sbtJdiTools = "1.2.0"
 
-  val scalaCli = "1.12.3"
+  val scalaCli = "1.12.4"
 
   val scalafix = "0.14.6"
 
@@ -79,7 +79,7 @@ object V {
 
   val scalameta = "4.15.2"
 
-  val scribe = "3.17.0"
+  val scribe = "3.18.0"
 
   // scribe dropped Scala 2.12 support after 3.15.2
   def scribe(scalaVersion: String): String =
