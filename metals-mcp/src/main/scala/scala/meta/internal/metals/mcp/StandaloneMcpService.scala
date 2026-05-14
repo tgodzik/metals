@@ -9,6 +9,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import scala.util.control.NonFatal
 
+import scala.meta.internal.infra.NoopFeatureFlagProvider
+import scala.meta.internal.infra.NoopMonitoringClient
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals._
 import scala.meta.internal.metals.clients.language.ConfiguredLanguageClient
@@ -67,7 +69,8 @@ class StandaloneMcpService(
 
   private val statusBar: StatusBar = new StatusBar(mcpClient, time)
 
-  private val timerProvider: TimerProvider = new TimerProvider(time)
+  private val timerProvider: TimerProvider =
+    new TimerProvider(time, metrics = new NoopMonitoringClient())
 
   private val workDoneProgress: WorkDoneProgress =
     new WorkDoneProgress(mcpClient, time)
@@ -115,6 +118,8 @@ class StandaloneMcpService(
     bspStatus,
     workDoneProgress,
     maxScalaCliServers = 3,
+    NoopFeatureFlagProvider,
+    new NoopMonitoringClient(),
     moduleStatus,
   )
 

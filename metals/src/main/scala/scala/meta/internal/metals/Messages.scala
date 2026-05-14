@@ -6,8 +6,7 @@ import scala.collection.mutable
 
 import scala.meta.internal.builds.BuildTool
 import scala.meta.internal.builds.VersionRecommendation
-import scala.meta.internal.jdk.CollectionConverters._
-import scala.meta.internal.metals.MetalsEnrichments.diagnosticMessageAsString
+import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.clients.language.MetalsInputBoxParams
 import scala.meta.internal.metals.clients.language.MetalsStatusParams
 import scala.meta.internal.semver.SemVer
@@ -339,13 +338,13 @@ object Messages {
               |$originalError
               |```
               |
-              |${formatDiagnosticMessage(diagnosticMessageAsString(diag))}
+              |${formatDiagnosticMessage(diag.getMessageAsString)}
               |""".stripMargin
         case None =>
           // No matching diagnostic found at position, show all diagnostics
           val allDiags = diagnostics
             .map { d =>
-              s"Line ${d.getRange().getStart().getLine() + 1}: ${diagnosticMessageAsString(d)}"
+              s"Line ${d.getRange().getStart().getLine() + 1}: ${d.getMessageAsString}"
             }
             .mkString("\n\n---\n\n")
 

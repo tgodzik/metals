@@ -11,8 +11,8 @@ import scala.meta.internal.metals.Docstrings
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.ReferenceProvider
 import scala.meta.internal.metals.ScalaVersionSelector
-import scala.meta.internal.mtags.Mtags
 import scala.meta.internal.metals.mcp.McpPrinter._
+import scala.meta.internal.mtags.Mtags
 import scala.meta.io.AbsolutePath
 import scala.meta.pc.ContentType
 import scala.meta.pc.ParentSymbols

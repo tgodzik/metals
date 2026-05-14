@@ -6,10 +6,15 @@ import java.{util => ju}
 import scala.meta.internal.metals.Messages
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.TextEdits
+import scala.meta.internal.metals.clients.language.MetalsCreateTerminalParams
+import scala.meta.internal.metals.clients.language.MetalsEndTerminalParams
 import scala.meta.internal.metals.clients.language.MetalsInputBoxParams
 import scala.meta.internal.metals.clients.language.MetalsLanguageClient
 import scala.meta.internal.metals.clients.language.MetalsQuickPickParams
 import scala.meta.internal.metals.clients.language.MetalsStatusParams
+import scala.meta.internal.metals.clients.language.MetalsSyncModesParams
+import scala.meta.internal.metals.clients.language.MetalsSyncStatusParams
+import scala.meta.internal.metals.clients.language.MetalsTerminalOutputParams
 import scala.meta.internal.metals.clients.language.RawMetalsInputBoxResult
 import scala.meta.internal.metals.clients.language.RawMetalsQuickPickResult
 import scala.meta.internal.metals.clients.language.RawMetalsReadClipboardResult
@@ -61,6 +66,20 @@ class McpLanguageClient(workspace: AbsolutePath) extends MetalsLanguageClient {
   ): Unit = {
     // diagnotics are server via the compile request
   }
+
+  override def metalsCreateTerminal(
+      params: MetalsCreateTerminalParams
+  ): Unit = ()
+
+  override def metalsEndTerminal(params: MetalsEndTerminalParams): Unit = ()
+
+  override def metalsTerminalOutput(
+      params: MetalsTerminalOutputParams
+  ): Unit = ()
+
+  override def metalsSyncStatus(params: MetalsSyncStatusParams): Unit = ()
+
+  override def metalsSyncModes(params: MetalsSyncModesParams): Unit = ()
 
   override def showMessage(message: MessageParams): Unit = {
     val level = message.getType match {

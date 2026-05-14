@@ -1402,24 +1402,23 @@ class Compilers(
         c <- defResult.asScala
         originalUri = paramsWithOutline.uri
         locations = c.locations()
-        _ <-
+        resolvedLocations <-
           if (c.isResolved()) {
             val adjustable = locations.asScala.filter(loc =>
               originalUri.toString == loc.getUri()
             )
-            Future.successful(
-              adjust.adjustLocations(adjustable.asJava).asScala.toSeq
-            )
+            adjust.adjustLocations(adjustable.asJava).asScala.toSeq
+            Future.successful(locations.asScala)
           } else
             locateInsideDecompiledJar(c.symbol(), c.locations().asScala.toSeq)
       } yield {
         val definitionPaths =
-          locations.asScala.map(_.getUri().toAbsolutePath).asScala.toSet
+          resolvedLocations.map(_.getUri().toAbsolutePath).toSet
         val definitionPath =
           if (definitionPaths.size == 1) Some(definitionPaths.head)
           else None
         DefinitionResult(
-          locations.asJava,
+          resolvedLocations.asJava,
           c.symbol(),
           definitionPath,
           None,

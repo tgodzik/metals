@@ -799,6 +799,7 @@ object UserConfiguration {
            |much faster feedback loop but may show incorrect or incomplete error messages. Only
            |supported in Scala 2.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "build-on-change",
@@ -807,6 +808,7 @@ object UserConfiguration {
         "Disable build-on-change",
         """|If enabled, Metals will not automatically build the project when a file changes.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "build-on-focus",
@@ -815,6 +817,7 @@ object UserConfiguration {
         "Disable build-on-focus",
         """|If enabled, Metals will not automatically build the project when a file is focused (opened).
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "preferred-build-server",
@@ -833,6 +836,7 @@ object UserConfiguration {
         """|If enabled, Metals will set the presentation compiler source path. This will enable
            |the compiler to find types that have not been built yet.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "workspace-symbol-provider",
@@ -854,6 +858,7 @@ object UserConfiguration {
            |presentation compiler will run the RefChecks phase for additional
            |type checking diagnostics.
            |""".stripMargin,
+        isArray = true,
       ),
       UserConfigurationOption(
         "prompt-build-import",
@@ -864,6 +869,7 @@ object UserConfiguration {
            |when a new workspace is detected. When disabled, you can still manually
            |trigger import via the "Import build" command.
            |""".stripMargin,
+        isBoolean = true,
       ),
       UserConfigurationOption(
         "enable-best-effort",

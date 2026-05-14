@@ -182,6 +182,18 @@ trait CommonMtagsEnrichments {
       )
   }
 
+  implicit class XtensionDiagnosticLSPMtags(d: l.Diagnostic) {
+
+    /** Converts diagnostic message from Either[String, MarkupContent] to String (LSP 1.0+) */
+    def getMessageAsString: String = {
+      val msg = d.getMessage()
+      if (msg == null) ""
+      else if (msg.isLeft) msg.getLeft
+      else msg.getRight.getValue
+    }
+
+  }
+
   implicit class XtensionNIOPath(path: Path) {
     def filename: String = path.getFileName().toString()
     def exists: Boolean = {
