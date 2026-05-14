@@ -143,7 +143,7 @@ abstract class MetalsLspService(
   ThreadPools.discardRejectedRunnables("MetalsLanguageServer.sh", sh)
   ThreadPools.discardRejectedRunnables("MetalsLanguageServer.ec", ec)
 
-  def getVisibleName: String = folderVisibleName.getOrElse(folder.toString())
+  def getVisibleName: String = folderVisibleName.getOrElse(folder.filename)
 
   protected val cancelables = new MutableCancelable()
   val isCancelled = new AtomicBoolean(false)
@@ -301,6 +301,7 @@ abstract class MetalsLspService(
     downstreamTargets,
     initialServerConfig,
     () => userConfig,
+    clientConfig,
   )
 
   protected def semanticdbs(): Semanticdbs
@@ -607,6 +608,7 @@ abstract class MetalsLspService(
     packageProvider,
     scalaVersionSelector,
     clientConfig.icons(),
+    clientConfig.isReadClipboardProvider(),
     onCreate = path => {
       for {
         _ <- onCreate(path)
@@ -718,12 +720,14 @@ abstract class MetalsLspService(
 
   protected val codeActionProvider: CodeActionProvider = new CodeActionProvider(
     compilers,
+    folder,
     buffers,
     buildTargets,
     scalafixProvider,
     trees,
     diagnostics,
     languageClient,
+    clientConfig,
   )
 
   protected val inlayHintResolveProvider: InlayHintResolveProvider =
@@ -2119,7 +2123,7 @@ abstract class MetalsLspService(
   ): Future[Unit] = {
     paths
       .find { path =>
-        if (clientConfig.isDidFocusProvider() || focusedDocument.isDefined) {
+        if (clientConfig.isDidFocusProvider()) {
           focusedDocument.contains(path) &&
           path.isWorksheet
         } else {

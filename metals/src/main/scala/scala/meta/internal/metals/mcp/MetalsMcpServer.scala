@@ -1,6 +1,5 @@
 package scala.meta.internal.metals.mcp
 
-import java.io.PrintWriter
 import java.net.InetSocketAddress
 import java.nio.file.Path
 import java.util.Arrays
@@ -24,11 +23,11 @@ import scala.meta.internal.metals.Diagnostics
 import scala.meta.internal.metals.FormattingProvider
 import scala.meta.internal.metals.JsonParser.XtensionSerializableToJson
 import scala.meta.internal.metals.MetalsEnrichments._
+import scala.meta.internal.metals.MetalsServerConfig
 import scala.meta.internal.metals.MutableCancelable
 import scala.meta.internal.metals.ScalaVersionSelector
 import scala.meta.internal.metals.ScalaVersions
 import scala.meta.internal.metals.TaskProgress
-import scala.meta.internal.metals.Trace
 import scala.meta.internal.metals.mcp.McpPrinter._
 import scala.meta.internal.metals.mcp.McpQueryEngine
 import scala.meta.internal.metals.mcp.SymbolType
@@ -38,15 +37,14 @@ import scala.meta.io.AbsolutePath
 import ch.epfl.scala.bsp4j.BuildTargetIdentifier
 import ch.epfl.scala.bsp4j.StatusCode
 import com.fasterxml.jackson.databind.ObjectMapper
-import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper
+import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper
 import io.modelcontextprotocol.server.McpAsyncServerExchange
 import io.modelcontextprotocol.server.McpServer
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider
+import io.modelcontextprotocol.spec.McpSchema.CallToolRequest
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult
 import io.modelcontextprotocol.spec.McpSchema.Content
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities
 import io.modelcontextprotocol.spec.McpSchema.TextContent
 import io.modelcontextprotocol.spec.McpSchema.Tool
@@ -81,9 +79,6 @@ class MetalsMcpServer(
 
   private val client =
     Client.allClients.find(_.names.contains(clientName)).getOrElse(NoClient)
-
-  val tracePrinter: Option[PrintWriter] =
-    Trace.setupTracePrinter("mcp", projectPath)
 
   private val objectMapper = new ObjectMapper()
 
@@ -137,16 +132,6 @@ class MetalsMcpServer(
     asyncServer.addTool(createRunScalafixRuleTool()).subscribe()
     asyncServer.addTool(createListScalafixRulesTool()).subscribe()
 
-    // Log server initialization
-    asyncServer.loggingNotification(
-      LoggingMessageNotification
-        .builder()
-        .level(LoggingLevel.INFO)
-        .logger(serverName)
-        .data(s"Server initialized for project: $projectName")
-        .build()
-    )
-
     // serve servlet
     val servletDeployment = Servlets
       .deployment()
@@ -190,12 +175,27 @@ class MetalsMcpServer(
     val port =
       listenerInfo.get(0).getAddress().asInstanceOf[InetSocketAddress].getPort()
 
+    val activeClientExtensionIds =
+      MetalsServerConfig.default.activeClientExtensionIds
+
     if (savedConfigPort.isEmpty) {
-      McpConfig.writeConfig(port, projectName, projectPath, NoClient)
+      McpConfig.writeConfig(
+        port,
+        projectName,
+        projectPath,
+        NoClient,
+        activeClientExtensionIds,
+      )
     }
 
     if (savedClientConfigPort.isEmpty) {
-      McpConfig.writeConfig(port, projectName, projectPath, client)
+      McpConfig.writeConfig(
+        port,
+        projectName,
+        projectPath,
+        client,
+        activeClientExtensionIds,
+      )
     }
 
     McpConfig.rewriteOldEndpointIfNeeded(projectPath, projectName, client, port)
@@ -207,7 +207,9 @@ class MetalsMcpServer(
       )
     )
 
-    scribe.info(s"Metals MCP server started on port: $port.")
+    scribe.info(
+      s"To connect to Metals MCP server use `http` transport type and url: http://localhost:$port/mcp."
+    )
 
     cancelable.add(() => undertowServer.stop())
   }
@@ -238,24 +240,35 @@ class MetalsMcpServer(
           .slowConnectToBuildServer(forceImport = true, TaskProgress.empty)
           .map {
             case BuildChange.None =>
-              new CallToolResult(createContent("No changes detected"), false)
+              CallToolResult
+                .builder()
+                .content(createContent("No changes detected"))
+                .isError(false)
+                .build()
             case BuildChange.Reconnected =>
-              new CallToolResult(
-                createContent("Reconnected to build server"),
-                false,
-              )
+              CallToolResult
+                .builder()
+                .content(createContent("Reconnected to build server"))
+                .isError(false)
+                .build()
             case BuildChange.Reloaded =>
-              new CallToolResult(createContent("Build reloaded"), false)
+              CallToolResult
+                .builder()
+                .content(createContent("Build reloaded"))
+                .isError(false)
+                .build()
             case BuildChange.Failed =>
-              new CallToolResult(
-                createContent("Failed to reimport build."),
-                false,
-              )
+              CallToolResult
+                .builder()
+                .content(createContent("Failed to reimport build."))
+                .isError(true)
+                .build()
             case BuildChange.Cancelled =>
-              new CallToolResult(
-                createContent("Reimport cancelled by the user."),
-                false,
-              )
+              CallToolResult
+                .builder()
+                .content(createContent("Reimport cancelled by the user."))
+                .isError(true)
+                .build()
           }
           .toMono
       },
@@ -287,7 +300,11 @@ class MetalsMcpServer(
               } else {
                 s"Compilation successful with warnings:\n$diagnosticsOutput"
               }
-            new CallToolResult(createContent(content), false)
+            CallToolResult
+              .builder()
+              .content(createContent(content))
+              .isError(false)
+              .build()
           }
           .toMono
       },
@@ -320,10 +337,15 @@ class MetalsMcpServer(
             .compileFile(path)
             .map {
               case c if c.getStatusCode == StatusCode.CANCELLED =>
-                new CallToolResult(
-                  createContent("Compilation cancelled or incorrect file path"),
-                  false,
-                )
+                CallToolResult
+                  .builder()
+                  .content(
+                    createContent(
+                      "Compilation cancelled or incorrect file path"
+                    )
+                  )
+                  .isError(true)
+                  .build()
               case _ =>
                 lazy val buildTarget = buildTargets.inverseSources(path)
 
@@ -369,16 +391,21 @@ class MetalsMcpServer(
                   .orElse(inUpstreamModulesErrors)
                   .getOrElse("Compilation successful.")
 
-                new CallToolResult(createContent(content), false)
+                CallToolResult
+                  .builder()
+                  .content(createContent(content))
+                  .isError(false)
+                  .build()
             }
             .toMono
         } else {
           Future
             .successful(
-              new CallToolResult(
-                createContent(s"Error: File not found: $path"),
-                true,
-              )
+              CallToolResult
+                .builder()
+                .content(createContent(s"Error: File not found: $path"))
+                .isError(true)
+                .build()
             )
             .toMono
         }
@@ -428,12 +455,17 @@ class MetalsMcpServer(
                 }
                 .orElse(upstreamModulesErros(target.id, "module"))
                 .getOrElse("Compilation successful.")
-              new CallToolResult(createContent(result), false)
+              CallToolResult
+                .builder()
+                .content(createContent(result))
+                .isError(false)
+                .build()
             case None =>
-              new CallToolResult(
-                createContent(s"Error: Module not found: $module"),
-                true,
-              )
+              CallToolResult
+                .builder()
+                .content(createContent(s"Error: Module not found: $module"))
+                .isError(true)
+                .build()
           }
         }.toMono
       },
@@ -525,11 +557,19 @@ class MetalsMcpServer(
         (result match {
           case Right(value) =>
             value.map(content =>
-              new CallToolResult(createContent(content), false)
+              CallToolResult
+                .builder()
+                .content(createContent(content))
+                .isError(false)
+                .build()
             )
           case Left(error) =>
             Future.successful(
-              new CallToolResult(createContent(s"Error: $error"), true)
+              CallToolResult
+                .builder()
+                .content(createContent(s"Error: $error"))
+                .isError(true)
+                .build()
             )
         }).toMono
       },
@@ -572,10 +612,11 @@ class MetalsMcpServer(
         queryEngine
           .globSearch(query, Set.empty, path)
           .map(result =>
-            new CallToolResult(
-              createContent(result.map(_.show).mkString("\n")),
-              false,
-            )
+            CallToolResult
+              .builder()
+              .content(createContent(result.map(_.show).mkString("\n")))
+              .isError(false)
+              .build()
           )
           .toMono
       },
@@ -638,10 +679,11 @@ class MetalsMcpServer(
         queryEngine
           .globSearch(query, symbolTypesSet, path)
           .map(result =>
-            new CallToolResult(
-              createContent(result.map(_.show).mkString("\n")),
-              false,
-            )
+            CallToolResult
+              .builder()
+              .content(createContent(result.map(_.show).mkString("\n")))
+              .isError(false)
+              .build()
           )
           .toMono
       },
@@ -659,7 +701,16 @@ class MetalsMcpServer(
           },
           "fileInFocus": {
             "type": "string",
-            "description": "The current file in focus for context, if empty we will try to detect it"
+            "description": "The current file in focus for context. If not provided, will use first available build target."
+          },
+          "module": {
+            "type": "string",
+            "description": "Explicit module (build target) name to use for context, e.g. 'core', 'services'. Takes precedence over fileInFocus."
+          },
+          "searchAllTargets": {
+            "type": "boolean",
+            "description": "If true, search all build targets and combine results. Useful for understanding cross-module visibility of project symbols.",
+            "default": false
           }
         },
         "required": ["fqcn"]
@@ -672,7 +723,11 @@ class MetalsMcpServer(
         """|Inspect a chosen Scala symbol.
            |For packages, objects and traits returns list of members.
            |For classes returns list of members and constructors.
-           |For methods returns signatures of all overloaded methods.""".stripMargin
+           |For methods returns signatures of all overloaded methods.
+           |
+           |When no fileInFocus is provided, automatically uses the first available
+           |build target. Use searchAllTargets=true for comprehensive cross-module inspection.
+           |Use 'module' to explicitly specify which build target to use.""".stripMargin
       )
       .inputSchema(jsonMapper, schema)
       .build()
@@ -680,14 +735,19 @@ class MetalsMcpServer(
       tool,
       withErrorHandling { (exchange, arguments) =>
         val fqcn = arguments.getFqcn
-        val path = arguments.getFileInFocus
+        val pathOpt = arguments.getFileInFocusOpt
+        val moduleOpt = arguments.getOptNoEmptyString("module")
+        val searchAllTargets = arguments
+          .getOptAs[Boolean]("searchAllTargets")
+          .getOrElse(false)
         queryEngine
-          .inspect(fqcn, path)
+          .inspect(fqcn, pathOpt, moduleOpt, searchAllTargets)
           .map(result =>
-            new CallToolResult(
-              createContent(result.show),
-              false,
-            )
+            CallToolResult
+              .builder()
+              .content(createContent(result.show))
+              .isError(false)
+              .build()
           )
           .toMono
       },
@@ -702,6 +762,14 @@ class MetalsMcpServer(
           "fqcn": {
             "type": "string",
             "description": "Fully qualified name of the symbol to get documentation for"
+          },
+          "fileInFocus": {
+            "type": "string",
+            "description": "The current file in focus for context. If not provided, will use first available build target."
+          },
+          "module": {
+            "type": "string",
+            "description": "Explicit module (build target) name to use for context, e.g. 'core', 'services'. Takes precedence over fileInFocus."
           }
         },
         "required": ["fqcn"]
@@ -713,7 +781,11 @@ class MetalsMcpServer(
       .description(
         """|Get documentation for a chosen Scala symbol. Retrieves ScalaDoc comments,
            |parameter descriptions, return types, and usage examples for classes, methods,
-           |functions, and other symbols using their fully qualified name.""".stripMargin
+           |functions, and other symbols using their fully qualified name.
+           |
+           |When no fileInFocus is provided, automatically uses the first available
+           |build target for context, making this tool usable from MCP clients
+           |without editor integration.""".stripMargin
       )
       .inputSchema(jsonMapper, schema)
       .build()
@@ -721,15 +793,22 @@ class MetalsMcpServer(
       tool,
       withErrorHandling { (exchange, arguments) =>
         val fqcn = arguments.getFqcn
+        val pathOpt = arguments.getFileInFocusOpt
+        val moduleOpt = arguments.getOptNoEmptyString("module")
         Future {
-          queryEngine.getDocumentation(fqcn) match {
+          queryEngine.getDocumentation(fqcn, pathOpt, moduleOpt) match {
             case Some(result) =>
-              new CallToolResult(createContent(result.show), false)
+              CallToolResult
+                .builder()
+                .content(createContent(result.show))
+                .isError(false)
+                .build()
             case None =>
-              new CallToolResult(
-                createContent("Error: Symbol not found"),
-                false,
-              )
+              CallToolResult
+                .builder()
+                .content(createContent("Error: Symbol not found"))
+                .isError(true)
+                .build()
           }
         }.toMono
       },
@@ -741,13 +820,17 @@ class MetalsMcpServer(
       {
         "type": "object",
         "properties": {
-          "fqcn": { 
+          "fqcn": {
             "type": "string",
             "description": "Fully qualified name of the symbol to get usages for"
           },
           "fileInFocus": {
             "type": "string",
-            "description": "The current file in focus for context, if empty we will try to detect it"
+            "description": "The current file in focus for context. If not provided, will use first available build target."
+          },
+          "module": {
+            "type": "string",
+            "description": "Explicit module (build target) name to use for context, e.g. 'core', 'services'. Takes precedence over fileInFocus."
           }
         },
         "required": ["fqcn"]
@@ -759,7 +842,11 @@ class MetalsMcpServer(
       .description(
         """|Get usages for a chosen Scala symbol. Find all references and usages of classes,
            |methods, variables, and other symbols across the entire project. Returns precise
-           |locations with file paths and line numbers for refactoring and code analysis.""".stripMargin
+           |locations with file paths and line numbers for refactoring and code analysis.
+           |
+           |When no fileInFocus is provided, automatically uses the first available
+           |build target for context, making this tool usable from MCP clients
+           |without editor integration.""".stripMargin
       )
       .inputSchema(jsonMapper, schema)
       .build()
@@ -767,10 +854,15 @@ class MetalsMcpServer(
       tool,
       withErrorHandling { (exchange, arguments) =>
         val fqcn = arguments.getFqcn
-        val path = arguments.getFileInFocus
+        val pathOpt = arguments.getFileInFocusOpt
+        val moduleOpt = arguments.getOptNoEmptyString("module")
         Future {
-          val result = queryEngine.getUsages(fqcn, path)
-          new CallToolResult(createContent(result.show(projectPath)), false)
+          val result = queryEngine.getUsages(fqcn, pathOpt, moduleOpt)
+          CallToolResult
+            .builder()
+            .content(createContent(result.show(projectPath)))
+            .isError(false)
+            .build()
         }.toMono
       },
     )
@@ -877,7 +969,11 @@ class MetalsMcpServer(
 
         Future
           .successful(
-            new CallToolResult(createContent(completions), false)
+            CallToolResult
+              .builder()
+              .content(createContent(completions))
+              .isError(false)
+              .build()
           )
           .toMono
       },
@@ -907,10 +1003,15 @@ class MetalsMcpServer(
             buildTargets.allBuildTargetIds.flatMap(
               buildTargets.jvmTarget(_).map(_.displayName)
             )
-          new CallToolResult(
-            s"Available modules (build targets):${modules.map(module => s"\n- $module").mkString}",
-            false,
-          )
+          CallToolResult
+            .builder()
+            .content(
+              createContent(
+                s"Available modules (build targets):${modules.map(module => s"\n- $module").mkString}"
+              )
+            )
+            .isError(false)
+            .build()
         }.toMono
       },
     )
@@ -948,17 +1049,21 @@ class MetalsMcpServer(
             .flatMap {
               case Left(errorMessage) =>
                 Future.successful(
-                  new CallToolResult(
-                    createContent(errorMessage),
-                    true,
-                  )
+                  CallToolResult
+                    .builder()
+                    .content(createContent(errorMessage))
+                    .isError(true)
+                    .build()
                 )
               case Right(Nil) =>
                 Future.successful(
-                  new CallToolResult(
-                    createContent("File is already properly formatted."),
-                    false,
-                  )
+                  CallToolResult
+                    .builder()
+                    .content(
+                      createContent("File is already properly formatted.")
+                    )
+                    .isError(false)
+                    .build()
                 )
               case Right(formattedText) =>
                 languageClient
@@ -973,22 +1078,26 @@ class MetalsMcpServer(
                   )
                   .asScala
                   .map { _ =>
-                    new CallToolResult(
-                      createContent(s"$path was formatted"),
-                      false,
-                    )
+                    CallToolResult
+                      .builder()
+                      .content(createContent(s"$path was formatted"))
+                      .isError(false)
+                      .build()
                   }
             }
             .toMono
         } else {
           Future
             .successful(
-              new CallToolResult(
-                createContent(
-                  s"Error: File not found or not a Scala file: $path"
-                ),
-                true,
-              )
+              CallToolResult
+                .builder()
+                .content(
+                  createContent(
+                    s"Error: File not found or not a Scala file: $path"
+                  )
+                )
+                .isError(true)
+                .build()
             )
             .toMono
         }
@@ -1091,17 +1200,21 @@ class MetalsMcpServer(
           )
         resultingFuture.map {
           case Right(res) =>
-            new CallToolResult(
-              createContent(
-                s"Created and ran Scalafix rule ${res.ruleName} successfully"
-              ),
-              false,
-            )
+            CallToolResult
+              .builder()
+              .content(
+                createContent(
+                  s"Created and ran Scalafix rule ${res.ruleName} successfully"
+                )
+              )
+              .isError(false)
+              .build()
           case Left(error) =>
-            new CallToolResult(
-              createContent(errorMessage(error)),
-              true,
-            )
+            CallToolResult
+              .builder()
+              .content(createContent(errorMessage(error)))
+              .isError(true)
+              .build()
         }.toMono
       },
     )
@@ -1145,13 +1258,18 @@ class MetalsMcpServer(
         }
         runResult
           .map { _ =>
-            new CallToolResult(
-              createContent("Scalafix rule run successfully"),
-              false,
-            )
+            CallToolResult
+              .builder()
+              .content(createContent("Scalafix rule run successfully"))
+              .isError(false)
+              .build()
           }
           .recover { case error =>
-            new CallToolResult(createContent(error.getMessage), true)
+            CallToolResult
+              .builder()
+              .content(createContent(error.getMessage))
+              .isError(true)
+              .build()
           }
           .toMono
       },
@@ -1182,12 +1300,15 @@ class MetalsMcpServer(
             allRules.toList.sortBy(_._1).map { case (ruleName, description) =>
               s"- $ruleName: $description"
             }
-          new CallToolResult(
-            createContent(
-              s"Available scalafix rules:\n${content.mkString("\n")}"
-            ),
-            false,
-          )
+          CallToolResult
+            .builder()
+            .content(
+              createContent(
+                s"Available scalafix rules:\n${content.mkString("\n")}"
+              )
+            )
+            .isError(false)
+            .build()
         }.toMono
       },
     )
@@ -1197,9 +1318,10 @@ class MetalsMcpServer(
       f: (McpAsyncServerExchange, JMap[String, Object]) => Mono[CallToolResult]
   ): BiFunction[
     McpAsyncServerExchange,
-    JMap[String, Object],
+    CallToolRequest,
     Mono[CallToolResult],
-  ] = { (exchange, arguments) =>
+  ] = { (exchange, request) =>
+    val arguments = request.arguments()
     try {
       f(exchange, arguments)
     } catch {
@@ -1209,12 +1331,15 @@ class MetalsMcpServer(
             e.getStackTrace.mkString("\n")
         )
         Mono.just(
-          new CallToolResult(
-            createContent(
-              s"Error: ${e.getMessage}, arguments: ${arguments.toJson}"
-            ),
-            true,
-          )
+          CallToolResult
+            .builder()
+            .content(
+              createContent(
+                s"Error: ${e.getMessage}, arguments: ${arguments.toJson}"
+              )
+            )
+            .isError(true)
+            .build()
         )
     }
   }

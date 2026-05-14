@@ -39,7 +39,7 @@ import org.eclipse.lsp4j.WorkDoneProgressCreateParams
 final class ConfiguredLanguageClient(
     initial: MetalsLanguageClient,
     clientConfig: ClientConfiguration,
-    service: WorkspaceLspService,
+    service: Option[WorkspaceLspService],
 )(implicit ec: ExecutionContext)
     extends DelegatingLanguageClient(initial) {
 
@@ -95,10 +95,12 @@ final class ConfiguredLanguageClient(
             case `action` =>
               val execCommandParams =
                 new ExecuteCommandParams(params.command, List.empty.asJava)
-              if (ServerCommands.allIds.contains(params.command)) {
-                service.executeCommand(execCommandParams)
-              } else {
-                underlying.metalsExecuteClientCommand(execCommandParams)
+              service match {
+                case Some(service)
+                    if ServerCommands.allIds.contains(params.command) =>
+                  service.executeCommand(execCommandParams)
+                case _ =>
+                  underlying.metalsExecuteClientCommand(execCommandParams)
               }
             case _ =>
           }
@@ -154,7 +156,7 @@ final class ConfiguredLanguageClient(
             },
           )
         )
-        .withTimeout(15, TimeUnit.SECONDS)
+        .withTimeout(15, TimeUnit.SECONDS, Some("sending showMessageRequest"))
         .recover { case _: TimeoutException =>
           result.cancel(false)
           Messages.missedByUser

@@ -142,7 +142,7 @@ class WorkspaceLspService(
 
   private val languageClient = {
     val languageClient =
-      new ConfiguredLanguageClient(client, clientConfig, this)
+      new ConfiguredLanguageClient(client, clientConfig, Some(this))
     // Set the language client so that we can forward log messages to the client
     LanguageClientLogger.languageClient = Some(languageClient)
     cancelables.add(() => languageClient.shutdown())
@@ -1100,6 +1100,11 @@ class WorkspaceLspService(
         onCurrentFolder(
           _.connect(Disconnect(shutdownBuildServer = false)).ignoreValue,
           ServerCommands.DisconnectBuildServer.title,
+        ).asJavaObject
+      case ServerCommands.DisconnectBuildServerAndShutdown() =>
+        onCurrentFolder(
+          _.connect(Disconnect(shutdownBuildServer = true)).ignoreValue,
+          ServerCommands.DisconnectBuildServerAndShutdown.title,
         ).asJavaObject
       case ServerCommands.DecodeFile(uri) =>
         getServiceForOpt(uri)

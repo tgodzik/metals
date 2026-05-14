@@ -12,7 +12,7 @@ Global / resolvers += "scala-nightlies" at
 
 // The OSS version of Metals that this Databricks-internal fork is based on.
 // Make sure to bump up this version when we merge with upstream.
-val forkBaseVersion = "1.6.5"
+val forkBaseVersion = "1.6.6"
 
 val currentVersion = "2.0.0"
 
@@ -202,6 +202,7 @@ def lintingOptions(scalaVersion: String) = {
     "-Wconf:src=*.TreeViewProvider.scala&msg=parameter params in method (children|parent) is never used:silent",
     "-Wconf:src=*.InheritanceContext.scala&msg=parameter ec in method getLocations is never used:silent",
     "-Wconf:src=*.CompilerWrapper.scala&msg=parameter params in method compiler is never used:silent",
+    "-Wconf:src=*.MetalsLanguageClient.scala&msg=parameter params in method showMessageRequest is never used:silent",
     // silence "The outer reference in this type test cannot be checked at run time."
     "-Wconf:src=.*(CompletionProvider|ArgCompletions|Completions|Keywords|IndentOnPaste).scala&msg=The outer reference:silent",
   )
@@ -618,7 +619,7 @@ lazy val metals = project
       "io.undertow" % "undertow-core" % "2.2.20.Final",
       "org.jboss.xnio" % "xnio-nio" % "3.8.17.Final",
       // for persistent data like "dismissed notification"
-      "org.flywaydb" % "flyway-core" % "11.20.2",
+      "org.flywaydb" % "flyway-core" % "12.0.3",
       "com.h2database" % "h2" % "2.4.240",
       // for BSP
       "org.scala-sbt.ipcsocket" % "ipcsocket" % "1.6.3",
@@ -661,9 +662,9 @@ lazy val metals = project
       "com.outr" %% "scribe-file" % V.scribe,
       "com.outr" %% "scribe-slf4j2" % V.scribe, // needed for flyway database migrations
       // for JSON formatted doctor
-      "com.lihaoyi" %% "ujson" % "4.4.2",
+      "com.lihaoyi" %% "ujson" % "4.4.3",
       // For fetching projects' templates
-      "com.lihaoyi" %% "requests" % "0.9.2",
+      "com.lihaoyi" %% "requests" % "0.9.3",
       // for producing SemanticDB from Scala source files, to be sure we want the same version of scalameta
       "org.scalameta" %% "scalameta" % V.semanticdb(scalaVersion.value),
       "org.scalameta" %% "semanticdb-metap" % V.semanticdb(
@@ -679,8 +680,10 @@ lazy val metals = project
       // For MCP
       "io.modelcontextprotocol.sdk" % "mcp" % V.modelContextProtocol,
       "io.modelcontextprotocol.sdk" % "mcp-json-jackson2" % V.modelContextProtocol,
-      "com.fasterxml.jackson.core" % "jackson-databind" % "2.21.0",
+      "com.fasterxml.jackson.core" % "jackson-databind" % "2.21.1",
       "io.undertow" % "undertow-servlet" % "2.3.12.Final",
+      // For Twirl
+      "org.playframework.twirl" %% "twirl-compiler" % "2.0.9",
     ),
     Compile / resourceGenerators += packageJavaHeaderCompiler,
     Compile / resourceGenerators += Def.task {
@@ -734,6 +737,15 @@ lazy val metals = project
   )
   .dependsOn(mtags, `mtags-java`, `mtags-protobuf`)
   .enablePlugins(BuildInfoPlugin)
+
+lazy val `metals-mcp` = project
+  .in(file("metals-mcp"))
+  .settings(
+    sharedSettings,
+    moduleName := "metals-mcp",
+    Compile / mainClass := Some("scala.meta.metals.McpMain"),
+  )
+  .dependsOn(metals)
 
 lazy val `sbt-metals` = project
   .settings(
@@ -915,6 +927,8 @@ lazy val mtest = project
       List(
         "org.scalameta" %% "munit" % {
           if (scalaVersion.value.startsWith("2.11")) "1.0.0-M10"
+          else if (scalaVersion.value == "2.13.17") "1.2.1"
+          else if (scalaVersion.value == "2.13.16") "1.2.0"
           else if (scalaVersion.value == "2.13.15") "1.0.4"
           else if (scalaVersion.value == "2.13.13") "1.0.0"
           else if (scalaVersion.value == "2.13.12") "1.0.0-M11"
@@ -1077,7 +1091,7 @@ lazy val slow = project
       .dependsOn(`sbt-metals` / publishLocal, publishBinaryMtags)
       .value,
   )
-  .dependsOn(unit)
+  .dependsOn(unit, `metals-mcp`)
 
 lazy val bench = project
   .in(file("metals-bench"))

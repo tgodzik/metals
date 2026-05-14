@@ -31,7 +31,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
-          cache: 'sbt'
+      - uses: coursier/cache-action@v8
+        with:
+          ignoreJob: true
+          ignoreMatrix: true
       - uses: sbt/setup-sbt@v1
       - name: Configure git
         run: |
@@ -59,7 +62,7 @@ jobs:
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports-${{ matrix.os }}-${{ matrix.shard }}
           path: "**/.reports/**/*"
@@ -135,7 +138,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
-          cache: 'sbt'
+      - uses: coursier/cache-action@v8
+        with:
+          ignoreJob: true
+          ignoreMatrix: true
       - uses: sbt/setup-sbt@v1
         with:
           sbt-runner-version: 1.10.3
@@ -148,7 +154,7 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports
           path: "**/.reports/**/*"
