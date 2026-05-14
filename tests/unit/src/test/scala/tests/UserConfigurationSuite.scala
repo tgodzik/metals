@@ -559,6 +559,7 @@ class UserConfigurationSuite extends BaseSuite {
           |mill-script                                  string                         ""              Mill script
           |scalafmt-config-path                         string                         ""              Scalafmt config path
           |scalafix-config-path                         string                         ""              Scalafix config path
+          |shim-globs                                   string                         `{}`.           Shim file globs
           |scalafix-rules-dependencies                  array                          []              Scalafix rules dependencies
           |excluded-packages                            array                          []              Excluded Packages
           |bloop-sbt-already-installed                  boolean                        false           Don't generate Bloop plugin file for sbt
@@ -580,12 +581,21 @@ class UserConfigurationSuite extends BaseSuite {
           |test-user-interface                          [code lenses,test explorer]    code lenses     Test UI used for tests and test suites
           |java-format.eclipse-config-path              string                         ""              Eclipse Java formatter config path
           |java-format.eclipse-profile                  string                         ""              Eclipse Java formatting profile
+          |java-formatter                               string                         empty string `""`. Java formatter
           |scala-cli-launcher                           string                         ""              Scala CLI launcher
           |custom-project-root                          string                         ""              Custom project root
           |verbose-compilation                          boolean                        false           Show all compilation debugging information
           |auto-import-builds                           [off,initial,all]              off             Import build when changes detected without prompting
           |target-build-tool                            string                         ""              Preferred build tool when multiple are detected
           |default-bsp-to-build-tool                    boolean                        false           Default to using build tool as your build server.
+          |presentation-compiler-diagnostics            boolean                        true            [Experimental] Show diagnostics messages from the Scala presentation compiler
+          |build-on-change                              boolean                        true            Disable build-on-change
+          |build-on-focus                               boolean                        true            Disable build-on-focus
+          |preferred-build-server                       string                         empty string `""`. Preferred build server
+          |use-source-path                              boolean                        true            Use presentation compiler source path
+          |workspace-symbol-provider                    string                         bsp             Workspace Symbol Provider
+          |additional-pc-checks                         array                          `[]`            Additional Presentation Compiler Checks
+          |prompt-build-import                          boolean                        false           Prompt Build Import
           |enable-best-effort                           boolean                        false           Use best effort compilation for Scala 3.
           |default-shell                                string                         ""              Full path to the shell executable to be used as the default
           |start-mcp-server                             boolean                        false           Start MCP server

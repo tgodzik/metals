@@ -5,6 +5,7 @@ import java.net.URI
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
+
 import scala.meta.internal.jpc.JavaMetalsCompiler
 import scala.meta.internal.metals.CompilerVirtualFileParams
 import scala.meta.internal.metals.EmptyCancelToken
