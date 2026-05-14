@@ -12,7 +12,7 @@ Global / resolvers += "scala-nightlies" at
 
 // The OSS version of Metals that this Databricks-internal fork is based on.
 // Make sure to bump up this version when we merge with upstream.
-val forkBaseVersion = "1.6.4"
+val forkBaseVersion = "1.6.5"
 
 val currentVersion = "2.0.0"
 
@@ -20,6 +20,7 @@ def localSnapshotVersion = sys.env.getOrElse(
   "METALS_VERSION",
   s"$currentVersion-${sys.env.getOrElse("METALS_VERSION_SUFFIX", "SNAPSHOT")}",
 )
+def latestReleaseVersion = "1.6.4"
 def isCI = System.getenv("CI") != null
 def isTest = System.getenv("METALS_TEST") != null
 
@@ -372,7 +373,7 @@ lazy val mtagsShared = project
       "com.google.protobuf" % "protobuf-java" % V.protobuf,
       V.guava,
       "io.get-coursier" % "interface" % V.coursierInterfaces,
-      "org.lz4" % "lz4-java" % "1.8.0",
+      "org.lz4" % "lz4-java" % "1.8.1",
       "org.slf4j" % "slf4j-api" % "1.7.36",
     ),
     libraryDependencies ++= {
@@ -444,7 +445,7 @@ val mtagsSettings = List(
     "org.jsoup" % "jsoup" % V.jsoup, // for extracting HTML from javadocs
     // for ivy completions
     "io.get-coursier" % "interface" % V.coursierInterfaces,
-    "org.lz4" % "lz4-java" % "1.8.0",
+    "org.lz4" % "lz4-java" % "1.8.1",
   ),
   libraryDependencies ++= {
     crossSetting(
@@ -608,7 +609,7 @@ lazy val metals = project
       "com.google.code.findbugs" % "jsr305" % "3.0.2", // for nullability annotations
       V.guava,
       "org.slf4j" % "slf4j-api" % "1.7.36",
-      "org.scalameta" %% "metaconfig-core" % "0.16.0",
+      "org.scalameta" %% "metaconfig-core" % "0.18.2",
       // for measuring memory footprint
       "org.openjdk.jol" % "jol-core" % "0.17",
       // for file watching
@@ -617,7 +618,7 @@ lazy val metals = project
       "io.undertow" % "undertow-core" % "2.2.20.Final",
       "org.jboss.xnio" % "xnio-nio" % "3.8.17.Final",
       // for persistent data like "dismissed notification"
-      "org.flywaydb" % "flyway-core" % "11.14.0",
+      "org.flywaydb" % "flyway-core" % "11.20.2",
       "com.h2database" % "h2" % "2.4.240",
       // for BSP
       "org.scala-sbt.ipcsocket" % "ipcsocket" % "1.6.3",
@@ -660,9 +661,9 @@ lazy val metals = project
       "com.outr" %% "scribe-file" % V.scribe,
       "com.outr" %% "scribe-slf4j2" % V.scribe, // needed for flyway database migrations
       // for JSON formatted doctor
-      "com.lihaoyi" %% "ujson" % "4.3.2",
+      "com.lihaoyi" %% "ujson" % "4.4.2",
       // For fetching projects' templates
-      "com.lihaoyi" %% "requests" % "0.9.0",
+      "com.lihaoyi" %% "requests" % "0.9.2",
       // for producing SemanticDB from Scala source files, to be sure we want the same version of scalameta
       "org.scalameta" %% "scalameta" % V.semanticdb(scalaVersion.value),
       "org.scalameta" %% "semanticdb-metap" % V.semanticdb(
@@ -676,8 +677,9 @@ lazy val metals = project
       // For test frameworks
       "ch.epfl.scala" %% "bloop-config" % V.bloopConfig,
       // For MCP
-      "io.modelcontextprotocol.sdk" % "mcp" % "0.12.1",
-      "com.fasterxml.jackson.core" % "jackson-databind" % "2.20.0",
+      "io.modelcontextprotocol.sdk" % "mcp" % V.modelContextProtocol,
+      "io.modelcontextprotocol.sdk" % "mcp-json-jackson2" % V.modelContextProtocol,
+      "com.fasterxml.jackson.core" % "jackson-databind" % "2.21.0",
       "io.undertow" % "undertow-servlet" % "2.3.12.Final",
     ),
     Compile / resourceGenerators += packageJavaHeaderCompiler,
@@ -1086,6 +1088,11 @@ lazy val bench = project
     publish / skip := true,
     moduleName := "metals-bench",
     buildInfoKeys := Seq[BuildInfoKey](scalaVersion),
+    libraryDependencies ++= List(
+      "org.scalameta" % "semanticdb-scalac" % V.semanticdb(
+        scalaVersion.value
+      ) cross CrossVersion.full
+    ),
     buildInfoPackage := "bench",
     libraryDependencies ++= List(
       "tools.profiler" % "async-profiler" % "4.2",
@@ -1107,7 +1114,11 @@ lazy val docs = project
     publish / skip := true,
     moduleName := "metals-docs",
     mdoc := (Compile / run).evaluated,
-    dependencyOverrides += "org.scalameta" %% "metaconfig-core" % "0.16.0",
+    dependencyOverrides += "org.scalameta" %% "metaconfig-core" % "0.18.2",
+    buildInfoPackage := "docs",
+    buildInfoKeys := Seq[BuildInfoKey](
+      "latestReleaseVersion" -> latestReleaseVersion
+    ),
   )
   .dependsOn(metals)
-  .enablePlugins(DocusaurusPlugin)
+  .enablePlugins(DocusaurusPlugin, BuildInfoPlugin)
