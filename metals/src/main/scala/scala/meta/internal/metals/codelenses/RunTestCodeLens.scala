@@ -253,6 +253,7 @@ final class RunTestCodeLens(
       commands = {
         val main = classes.mainClasses
           .get(symbol)
+          .filter(_ => !path.isJava)
           .map(mainCommand(target, _, isJVM))
           .getOrElse(Nil)
         lazy val tests =

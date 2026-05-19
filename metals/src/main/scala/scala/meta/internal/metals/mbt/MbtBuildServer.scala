@@ -187,6 +187,7 @@ final class MbtBuildServer(
       )
       capabilities.setResourcesProvider(false)
       capabilities.setJvmCompileClasspathProvider(true)
+      capabilities.setJvmRunEnvironmentProvider(true)
       new InitializeBuildResult(
         MbtBuildServer.name,
         BuildInfo.metalsVersion,
@@ -412,10 +413,17 @@ final class MbtBuildServer(
 
   override def buildTargetJvmRunEnvironment(
       params: JvmRunEnvironmentParams
-  ): CompletableFuture[JvmRunEnvironmentResult] =
+  ): CompletableFuture[JvmRunEnvironmentResult] = {
+    val requestedTargets = params.getTargets.asScala.toSet
     CompletableFuture.completedFuture(
-      new JvmRunEnvironmentResult(List.empty.asJava)
+      new JvmRunEnvironmentResult(
+        importedBuildTargets
+          .filter(t => requestedTargets(t.id))
+          .map(_.jvmRunEnvironmentItem(workspace))
+          .asJava
+      )
     )
+  }
 
   override def buildTargetJvmTestEnvironment(
       params: JvmTestEnvironmentParams

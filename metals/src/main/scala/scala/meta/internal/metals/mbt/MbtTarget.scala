@@ -31,8 +31,11 @@ case class MbtTarget(
     workspace.resolve(".metals/mbt-out").createDirectories()
   }
 
+  private def classpathEntries: Seq[String] =
+    dependencyModules.flatMap(_.jarUri.map(_.toString))
+
   private def classpath: ju.List[String] =
-    dependencyModules.flatMap(_.jarUri.map(_.toString)).asJava
+    classpathEntries.asJava
 
   private def baseDirectory(workspace: AbsolutePath): AbsolutePath =
     workspace
@@ -67,8 +70,8 @@ case class MbtTarget(
   ): bsp4j.BuildTarget = {
     val capabilities = new bsp4j.BuildTargetCapabilities
     capabilities.setCanCompile(false)
-    capabilities.setCanDebug(false)
-    capabilities.setCanRun(false)
+    capabilities.setCanDebug(true)
+    capabilities.setCanRun(true)
     capabilities.setCanTest(false)
 
     val scalaVersion = this.scalaVersion.getOrElse(
@@ -116,6 +119,17 @@ case class MbtTarget(
       javacOptions.asJava,
       classpath,
       emptyClassDirectory(workspace).toURI.toString(),
+    )
+
+  def jvmRunEnvironmentItem(workspace: AbsolutePath): bsp4j.JvmEnvironmentItem =
+    new bsp4j.JvmEnvironmentItem(
+      id,
+      (emptyClassDirectory(
+        workspace
+      ).toURI.toString +: classpathEntries).asJava,
+      ju.Collections.emptyList(),
+      workspace.toURI.toString,
+      ju.Collections.emptyMap(),
     )
 
   def sourcesItem(
