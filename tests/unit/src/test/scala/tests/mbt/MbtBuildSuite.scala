@@ -2,6 +2,10 @@ package tests.mbt
 
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.util.concurrent.Executors
+
+import scala.concurrent.ExecutionContext
+import scala.concurrent.ExecutionContextExecutorService
 
 import scala.meta.internal.metals.BuildInfo
 import scala.meta.internal.metals.JsonParser.XtensionSerializableToJson
@@ -17,6 +21,8 @@ import com.google.gson.GsonBuilder
 import tests.FileLayout
 
 class MbtBuildSuite extends tests.BaseSuite {
+  implicit val ec: ExecutionContextExecutorService =
+    ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
 
   test("legacy-flat-format") {
     val dir = Files.createTempDirectory("mbt-legacy")
@@ -235,7 +241,12 @@ class MbtBuildSuite extends tests.BaseSuite {
 
     val build = MbtBuild.fromWorkspace(workspace)
     val server =
-      new MbtBuildServer(workspace, () => build, ScalaVersionSelector.default)
+      new MbtBuildServer(
+        workspace,
+        () => build,
+        ScalaVersionSelector.default,
+        None,
+      )
     val targets = build.mbtTargets
     val result =
       server

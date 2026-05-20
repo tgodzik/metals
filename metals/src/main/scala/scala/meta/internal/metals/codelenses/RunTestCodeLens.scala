@@ -150,6 +150,7 @@ final class RunTestCodeLens(
   }
 
   /**
+   * +
    * Java main method: public static void main(String[] args)
    */
   private def isMainMethod(signature: Signature, textDocument: TextDocument) = {

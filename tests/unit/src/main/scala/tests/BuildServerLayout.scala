@@ -115,6 +115,56 @@ object MillBuildLayout extends BuildToolLayout {
   //       |""".stripMargin
 }
 
+object GradleBuildLayout extends BuildToolLayout {
+
+  override def apply(sourceLayout: String, scalaVersion: String): String =
+    s"""|/build.gradle
+        |${buildGradleLayout(scalaVersion)}
+        |$sourceLayout
+        |""".stripMargin
+
+  def apply(
+      sourceLayout: String,
+      scalaVersion: String,
+      extraDependencies: List[String],
+  ): String = {
+    val deps = extraDependencies
+      .map(d => s"    implementation '$d'")
+      .mkString("\n")
+    val depsSection =
+      if (deps.isEmpty) ""
+      else s"\n$deps"
+    s"""|/.metals/txt.txt
+        |initialize the project for metals
+        |/build.gradle
+        |plugins {
+        |    id 'scala'
+        |    id 'application'
+        |}
+        |repositories {
+        |    mavenCentral()
+        |}
+        |dependencies {
+        |    implementation 'org.scala-lang:scala-library:$scalaVersion'$depsSection
+        |}
+        |$sourceLayout
+        |""".stripMargin
+  }
+
+  def buildGradleLayout(scalaVersion: String): String =
+    s"""|plugins {
+        |    id 'scala'
+        |    id 'application'
+        |}
+        |repositories {
+        |    mavenCentral()
+        |}
+        |dependencies {
+        |    implementation 'org.scala-lang:scala-library:$scalaVersion'
+        |}
+        |""".stripMargin
+}
+
 object BazelBuildLayout extends BuildToolLayout {
 
   override def apply(sourceLayout: String, scalaVersion: String): String =

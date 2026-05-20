@@ -18,6 +18,8 @@ import scala.concurrent.ExecutionContextExecutorService
 import scala.concurrent.Future
 import scala.concurrent.Promise
 import scala.jdk.CollectionConverters._
+import scala.util.Failure
+import scala.util.Success
 
 import scala.meta.internal.bsp.ConnectionBspStatus
 import scala.meta.internal.metals.BuildInfo
@@ -28,6 +30,7 @@ import scala.meta.internal.metals.DismissedNotifications
 import scala.meta.internal.metals.MetalsBuildClient
 import scala.meta.internal.metals.MetalsBuildServer
 import scala.meta.internal.metals.MetalsEnrichments.XtensionAbsolutePathBuffers
+import scala.meta.internal.metals.MetalsEnrichments.XtensionDebugSessionParams
 import scala.meta.internal.metals.MetalsServerConfig
 import scala.meta.internal.metals.QuietInputStream
 import scala.meta.internal.metals.ScalaVersionSelector
@@ -48,6 +51,7 @@ import ch.epfl.scala.bsp4j.CleanCacheResult
 import ch.epfl.scala.bsp4j.CompileParams
 import ch.epfl.scala.bsp4j.CompileProvider
 import ch.epfl.scala.bsp4j.CompileResult
+import ch.epfl.scala.bsp4j.DebugProvider
 import ch.epfl.scala.bsp4j.DebugSessionAddress
 import ch.epfl.scala.bsp4j.DebugSessionParams
 import ch.epfl.scala.bsp4j.DependencyModulesParams
@@ -93,7 +97,9 @@ final class MbtBuildServer(
     workspace: AbsolutePath,
     build: () => MbtBuild,
     scalaVersionSelector: ScalaVersionSelector,
-) extends MetalsBuildServer {
+    debugRunner: Option[BuildToolDebugRunner],
+)(implicit ec: ExecutionContextExecutorService)
+    extends MetalsBuildServer {
 
   private val buildClient = new AtomicReference[BuildClient]()
   private val importedBuild =
@@ -187,7 +193,11 @@ final class MbtBuildServer(
       )
       capabilities.setResourcesProvider(false)
       capabilities.setJvmCompileClasspathProvider(true)
-      capabilities.setJvmRunEnvironmentProvider(true)
+      if (debugRunner.isDefined) {
+        capabilities.setDebugProvider(
+          new DebugProvider(List("scala", "java").asJava)
+        )
+      }
       new InitializeBuildResult(
         MbtBuildServer.name,
         BuildInfo.metalsVersion,
@@ -404,24 +414,45 @@ final class MbtBuildServer(
 
   override def debugSessionStart(
       params: DebugSessionParams
-  ): CompletableFuture[DebugSessionAddress] =
-    CompletableFuture.failedFuture(
-      new UnsupportedOperationException(
-        "MBT build server does not support debug sessions."
-      )
-    )
+  ): CompletableFuture[DebugSessionAddress] = {
+    debugRunner match {
+      case None =>
+        CompletableFuture.failedFuture(
+          new UnsupportedOperationException(
+            "MBT build server does not have a configured debug runner."
+          )
+        )
+      case Some(runner) =>
+        params.asScalaMainClass() match {
+          case Left(error) =>
+            CompletableFuture.failedFuture(
+              new IllegalArgumentException(
+                s"Failed to parse main class: $error"
+              )
+            )
+          case Right(scalaMainClass) =>
+            val mainClass = scalaMainClass.getClassName()
+            val args = scalaMainClass.getArguments().asScala.toList
+            val jvmOptions = scalaMainClass.getJvmOptions().asScala.toList
+
+            val result = new CompletableFuture[DebugSessionAddress]()
+            runner
+              .startDebugSession(workspace, mainClass, args, jvmOptions)
+              .onComplete {
+                case Success(address) => result.complete(address)
+                case Failure(exception) =>
+                  result.completeExceptionally(exception)
+              }
+            result
+        }
+    }
+  }
 
   override def buildTargetJvmRunEnvironment(
       params: JvmRunEnvironmentParams
   ): CompletableFuture[JvmRunEnvironmentResult] = {
-    val requestedTargets = params.getTargets.asScala.toSet
     CompletableFuture.completedFuture(
-      new JvmRunEnvironmentResult(
-        importedBuildTargets
-          .filter(t => requestedTargets(t.id))
-          .map(_.jvmRunEnvironmentItem(workspace))
-          .asJava
-      )
+      new JvmRunEnvironmentResult(List.empty.asJava)
     )
   }
 
@@ -467,6 +498,7 @@ object MbtBuildServer {
       workDoneProgress: WorkDoneProgress,
       scalaVersionSelector: ScalaVersionSelector,
       userConfig: () => UserConfiguration,
+      debugRunner: Option[BuildToolDebugRunner] = None,
   )(implicit
       ec: ExecutionContextExecutorService
   ): Future[BuildServerConnection] = {
@@ -482,7 +514,12 @@ object MbtBuildServer {
         else updatedBuild
       }
       val server =
-        new MbtBuildServer(workspace, eagerBuild, scalaVersionSelector)
+        new MbtBuildServer(
+          workspace,
+          eagerBuild,
+          scalaVersionSelector,
+          debugRunner,
+        )
       val serverLauncher = new Launcher.Builder[BuildClient]()
         .setInput(serverInput)
         .setOutput(serverOutput)

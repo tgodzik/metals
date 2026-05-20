@@ -157,15 +157,9 @@ final class BuildTargetClasses(
         case (Some(connection), targets0) =>
           val targetsList = targets0.asJava
           val classes = targets0.map(t => (t, new Classes)).toMap
-
           val updateMainClasses = connection
             .mainClasses(new b.ScalaMainClassesParams(targetsList))
             .map(cacheMainClasses(classes, _))
-            .flatMap { _ =>
-              if (MbtBuildServer.isMbtServer(connection.name))
-                populateMbtMainClasses(classes, targets0)
-              else Future.unit
-            }
 
           val updateTestClasses =
             if (hasBazelBuildServer) {
@@ -181,6 +175,10 @@ final class BuildTargetClasses(
           for {
             _ <- updateMainClasses
             _ <- updateTestClasses
+            _ <-
+              if (MbtBuildServer.isMbtServer(connection.name))
+                populateMbtMainClasses(classes, targets0)
+              else Future.unit
           } yield {
             targetsList.forEach(invalidate)
             classes.foreach { case (id, classes) =>
@@ -495,9 +493,9 @@ final class BuildTargetClasses(
     }
   }
 
-  private def symbolToClassName(symbol: String): String = {
+  private def symbolToClassName(symbol: String, suffix: Char = '#'): String = {
     val withoutPrefix = symbol.stripPrefix("_empty_/")
-    val withoutHashAndAfter = withoutPrefix.indexOf('#') match {
+    val withoutHashAndAfter = withoutPrefix.indexOf(suffix) match {
       case -1 => withoutPrefix
       case index => withoutPrefix.substring(0, index)
     }
@@ -544,14 +542,12 @@ final class BuildTargetClasses(
             .queryWorkspaceSymbol("main")
             .flatMap(info => Option(info.getLocation()))
             .map(_.getUri.toAbsolutePath)
-
         val pathsFromReferences =
           mbtProvider.possibleReferences(
             MbtPossibleReferencesParams(
               references = Seq("scala/main#", "scala/App#")
             )
           )
-
         val candidatePaths =
           (pathsFromMainSymbols ++ pathsFromReferences)
             .filter(path =>
@@ -562,6 +558,8 @@ final class BuildTargetClasses(
 
         if (candidatePaths.isEmpty) Future.unit
         else {
+          // TODO maybe do it lazily, just keep the candidates
+          // TODO maybe we only need to run .info?
           compilers()
             .batchSemanticdbTextDocuments(
               candidatePaths,
@@ -600,9 +598,11 @@ final class BuildTargetClasses(
         result.put(symbol, mainClass(classSymbol))
       } else if (isScalaMainMethod(info, textDocument)) {
         val classSymbol = symbol.stripSuffix(".main().") + "."
-        result.put(classSymbol, mainClass(classSymbol))
+        val className = symbolToClassName(classSymbol, '.')
+        result.put(classSymbol, mainClass(className))
       } else if (isScalaApp(info)) {
-        result.put(symbol, mainClass(symbol))
+        val className = symbolToClassName(symbol, '.')
+        result.put(symbol, mainClass(className))
       } else {
         mainFromScalaMainAnnotation(info).foreach { mainSymbol =>
           result.put(mainSymbol, mainClass(mainSymbol))
@@ -645,9 +645,10 @@ final class BuildTargetClasses(
                     TypeRef(
                       _,
                       "scala/Array#",
-                      Vector(TypeRef(_, "java/lang/String#", _)),
+                      Vector(TypeRef(_, str, _)),
                     )
-                  ) =>
+                  )
+                  if str == "scala/Predef.String#" || str == "java/lang/String#" =>
                 true
               case _ => false
             }

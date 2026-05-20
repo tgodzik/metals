@@ -257,3 +257,30 @@ object BazelMbtTestInitializer extends BuildServerInitializer {
     }
   }
 }
+
+/**
+ * Initializes Metals without QuickBuild / Bloop install, then applies user
+ * configuration and waits for the BSP session for Gradle MBT.
+ */
+object GradleMbtTestInitializer extends BuildServerInitializer {
+  this: BaseLspSuite =>
+  override def initialize(
+      workspace: AbsolutePath,
+      server: TestingServer,
+      client: TestingClient,
+      expectError: Boolean,
+      userConfig: UserConfiguration,
+      workspaceFolders: Option[List[String]] = None,
+  )(implicit ec: ExecutionContext): Future[InitializeResult] = {
+    for {
+      initializeResult <- server.initialize(workspaceFolders)
+      _ <- server.initialized()
+      _ <- server.didChangeConfiguration(userConfig.toString)
+    } yield {
+      if (!expectError) {
+        server.assertBuildServerConnection()
+      }
+      initializeResult
+    }
+  }
+}

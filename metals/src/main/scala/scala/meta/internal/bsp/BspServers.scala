@@ -30,6 +30,8 @@ import scala.meta.internal.metals.TaskProgress
 import scala.meta.internal.metals.UserConfiguration
 import scala.meta.internal.metals.WorkDoneProgress
 import scala.meta.internal.metals.clients.language.ConfiguredLanguageClient
+import scala.meta.internal.metals.mbt.BuildToolDebugRunner
+import scala.meta.internal.metals.mbt.GradleBuildToolRunner
 import scala.meta.internal.metals.mbt.MbtBuild
 import scala.meta.internal.metals.mbt.MbtBuildServer
 import scala.meta.internal.mtags.MD5
@@ -174,6 +176,7 @@ final class BspServers(
       }
     }
     if (MbtBuildServer.isMbtServer(details.getName())) {
+      val debugRunner = detectBuildToolDebugRunner(projectDirectory)
       MbtBuildServer.newServer(
         projectDirectory,
         buildClient,
@@ -186,6 +189,7 @@ final class BspServers(
         workDoneProgress,
         scalaVersionSelector,
         userConfig,
+        debugRunner,
       )
     } else {
       BuildServerConnection.fromSockets(
@@ -203,6 +207,20 @@ final class BspServers(
         workDoneProgress = workDoneProgress,
       )
     }
+  }
+
+  /**
+   * Detect the appropriate BuildToolDebugRunner based on the build files
+   * present in the workspace.
+   */
+  private def detectBuildToolDebugRunner(
+      workspace: AbsolutePath
+  ): Option[BuildToolDebugRunner] = {
+    val gradleFiles = List("build.gradle", "build.gradle.kts")
+    val hasGradle = gradleFiles.exists(f => workspace.resolve(f).exists)
+
+    if (hasGradle) Some(new GradleBuildToolRunner())
+    else None
   }
 
   /**

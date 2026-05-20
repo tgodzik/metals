@@ -14,7 +14,7 @@ import scala.meta.internal.metals.mbt.MbtBuildServer
 import scala.meta.internal.metals.{BuildInfo => V}
 import scala.meta.io.AbsolutePath
 
-import tests.BaseLspSuite
+import tests.BaseCodeLensLspSuite
 import tests.BazelBuildLayout
 import tests.BazelMbtTestInitializer
 import tests.TestHovers
@@ -24,7 +24,7 @@ import tests.TestHovers
  * → [[MbtBuildServer]] → Scala hover.
  */
 class BazelMbtLspSuite
-    extends BaseLspSuite("bazel-mbt", BazelMbtTestInitializer)
+    extends BaseCodeLensLspSuite("bazel-mbt", BazelMbtTestInitializer)
     with TestHovers {
 
   private val bazelVersion = "8.2.1"
@@ -109,6 +109,9 @@ class BazelMbtLspSuite
           |import core.Hello
           |
           |object Main {
+          |  def main(args: Array[String]): Unit = {
+          |    println(msg)
+          |  }
           |  def msg = new Hello().hello
           |}
           |
@@ -347,6 +350,22 @@ class BazelMbtLspSuite
            |```
            |""".stripMargin.hover,
       )
+      _ <-
+        assertCodeLenses(
+          "app/Main.scala",
+          """|
+             |import core.Hello
+             |
+             |<<run>><<debug>>
+             |object Main {
+             |  def main(args: Array[String]): Unit = {
+             |    println(msg)
+             |  }
+             |  def msg = new Hello().hello
+             |}
+             |
+             |""".stripMargin,
+        )
     } yield ()
   }
 

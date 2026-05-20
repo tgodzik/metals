@@ -1223,6 +1223,7 @@ final case class TestingServer(
   ): Future[String] = {
     for {
       lenses <- codeLenses(filename, maxRetries, minExpectedLenses)
+      _ = pprint.log(lenses)
       textEdits = CodeLensesTextEdits(lenses, printCommand)
     } yield TextEdits.applyEdits(textContents(filename), textEdits.toList)
   }
