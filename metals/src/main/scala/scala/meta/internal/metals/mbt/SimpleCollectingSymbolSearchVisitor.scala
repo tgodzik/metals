@@ -25,7 +25,7 @@ class SimpleCollectingSymbolSearchVisitor extends SymbolSearchVisitor {
       new l.SymbolInformation(
         sym.displayName,
         kind,
-        new l.Location(path.toURI.toString(), range),
+        new l.Location(path.toUri.toString(), range),
         sym.owner.value.replace('/', '.'),
       )
     )

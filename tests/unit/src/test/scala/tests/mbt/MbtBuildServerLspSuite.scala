@@ -10,6 +10,8 @@ import scala.meta.internal.metals.AutoImportBuildKind
 import scala.meta.internal.metals.Configs.FallbackSourcepathConfig
 import scala.meta.internal.metals.Configs.ReferenceProviderConfig
 import scala.meta.internal.metals.Configs.WorkspaceSymbolProviderConfig
+import scala.meta.internal.metals.InitializationOptions
+import scala.meta.internal.metals.TestUserInterfaceKind
 import scala.meta.internal.metals.UserConfiguration
 import scala.meta.internal.metals.mbt.MbtBuildServer
 import scala.meta.internal.mtags.ScalametaCommonEnrichments._
@@ -32,6 +34,9 @@ class MbtBuildServerLspSuite
     extends BaseCompletionLspSuite("mbt-build-server")
     with TestHovers {
 
+  override protected def initializationOptions: Option[InitializationOptions] =
+    Some(InitializationOptions.Default.copy(testExplorerProvider = Some(true)))
+
   override def userConfig: UserConfiguration =
     super.userConfig.copy(
       fallbackScalaVersion = Some(BuildInfo.scalaVersion),
@@ -43,6 +48,7 @@ class MbtBuildServerLspSuite
       fallbackSourcepath = FallbackSourcepathConfig("all-sources"),
       preferredBuildServer = Some(MbtBuildServer.name),
       automaticImportBuild = AutoImportBuildKind.All,
+      testUserInterface = TestUserInterfaceKind.TestExplorer,
     )
 
   override def initializeGitRepo: Boolean = true
@@ -123,6 +129,97 @@ class MbtBuildServerLspSuite
         )
       } yield ()
     }
+
+  test("mbt-munit-test-discovery") {
+    cleanWorkspace()
+    val scalaLibJarUri =
+      Library
+        .getScalaLibraryJarPath(BuildInfo.scalaVersion)
+        .toURI
+        .toString
+    val scalaBinary =
+      BuildInfo.scalaVersion.split("\\.").take(2).mkString(".")
+    val munitJars = Fetch
+      .create()
+      .withDependencies(
+        Dependency.of("org.scalameta", s"munit_$scalaBinary", "0.7.29")
+      )
+      .fetch()
+      .asScala
+    val dependencyModules = {
+      val scalaLib =
+        s"org.scala-lang:scala-library:${BuildInfo.scalaVersion}" -> scalaLibJarUri
+      val munitModules = munitJars.map { file =>
+        val path = file.toPath
+        val version = path.getParent.getFileName.toString
+        val name = path.getFileName.toString
+        val org = path.getParent.getParent.getFileName.toString
+        val id = s"$org:$name:$version"
+        val jar = path.toUri.toString
+        id -> jar
+      }
+      (scalaLib :: munitModules.toList)
+    }
+    val depModules = dependencyModules
+      .map { case (id, jar) =>
+        s"""{
+           |      "id": "$id",
+           |      "jar": "$jar"
+           |    }""".stripMargin
+      }
+      .mkString(",\n")
+
+    val mbtJson =
+      s"""|{
+          |  "dependencyModules": [
+          |$depModules
+          |  ],
+          |  "namespaces": {
+          |    "test": {
+          |      "sources": ["src/**"],
+          |      "scalaVersion": "${BuildInfo.scalaVersion}",
+          |      "dependencyModules": [
+          |${dependencyModules.map { case (id, _) => s""""$id"""" }.mkString(",\n")}
+          |      ]
+          |    }
+          |  }
+          |}""".stripMargin
+    val testFile = "src/MunitTest.scala"
+
+    for {
+      _ <- initialize(
+        s"""|/.metals/mbt.json
+            |$mbtJson
+            |/$testFile
+            |package example
+            |
+            |class MunitTest extends munit.FunSuite {
+            |  def complicateMethod(): Unit = {
+            |    val a = 1
+            |    val b = 2
+            |    val c = a + b
+            |    println(c)
+            |  }
+            |  test("ok") {}
+            |}
+            |""".stripMargin
+      )
+      _ = assertConnectedToBuildServer("MBT")
+      _ <- server.didOpen(testFile)
+      testSuites <- server.discoverTestSuites(List(testFile))
+    } yield {
+      val testEvents = testSuites.flatMap(_.events.asScala.toList)
+      assert(
+        testEvents.nonEmpty,
+        s"Expected test explorer events, got: $testSuites",
+      )
+      val suiteNames = testEvents.map(_.toString)
+      assert(
+        suiteNames.exists(_.contains("MunitTest")),
+        s"Expected MunitTest suite in events: ${suiteNames.mkString(", ")}",
+      )
+    }
+  }
 
   test("two-targets-hover-definition-completion") {
     cleanWorkspace()
