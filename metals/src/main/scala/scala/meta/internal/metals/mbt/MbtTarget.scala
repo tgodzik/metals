@@ -133,14 +133,22 @@ case class MbtTarget(
   def runClassDirectories(
       workspace: AbsolutePath,
       buildToolName: String,
+      includeTests: Boolean = false,
   ): List[AbsolutePath] = {
     classDirectory.map(resolveClassDir(workspace, _)) match {
-      case Some(dir) => List(dir)
+      case Some(dir) =>
+        if (includeTests && !isTestTarget)
+          (dir :: MbtTarget.conventionalClassDirectories(
+            workspace,
+            buildToolName,
+            isTest = true,
+          )).distinct
+        else List(dir)
       case None =>
         MbtTarget.conventionalClassDirectories(
           workspace,
           buildToolName,
-          isTestTarget,
+          isTest = includeTests || isTestTarget,
         )
     }
   }

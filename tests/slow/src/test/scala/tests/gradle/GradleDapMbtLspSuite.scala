@@ -1,13 +1,19 @@
 package tests.gradle
 
+import java.util.concurrent.TimeUnit
+
+import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
 import scala.meta.internal.metals.AutoImportBuildKind
 import scala.meta.internal.metals.Configs.JavaSymbolLoaderConfig
 import scala.meta.internal.metals.Configs.ReferenceProviderConfig
 import scala.meta.internal.metals.Configs.WorkspaceSymbolProviderConfig
+import scala.meta.internal.metals.DebugUnresolvedTestClassParams
+import scala.meta.internal.metals.JsonParser._
 import scala.meta.internal.metals.Messages
 import scala.meta.internal.metals.UserConfiguration
+import scala.meta.internal.metals.debug.DebugWorkspaceLayout
 import scala.meta.internal.metals.mbt.MbtBuildServer
 
 import ch.epfl.scala.bsp4j.DebugSessionParamsDataKind
@@ -37,6 +43,17 @@ class GradleDapMbtLspSuite
 
   override def initializeGitRepo: Boolean = true
 
+  private def awaitMbtTestClassDiscovery(testFile: String): Future[Unit] = {
+    val metals = server.server
+    val targets = metals.buildTargets.allBuildTargetIds
+    for {
+      _ <- server.didSave(testFile)
+      _ <- metals.mbtSymbolSearch.recompileTurbineClasspath()
+      _ <- metals.buildTargetClasses.rebuildIndex(targets)
+      _ <- server.waitFor(TimeUnit.SECONDS.toMillis(10))
+    } yield ()
+  }
+
   private def buildGradle: String =
     """|plugins {
        |    id 'java'
@@ -45,6 +62,106 @@ class GradleDapMbtLspSuite
        |    mavenCentral()
        |}
        |""".stripMargin
+
+  private def buildGradleWithJunit: String =
+    """|plugins {
+       |    id 'java'
+       |}
+       |repositories {
+       |    mavenCentral()
+       |}
+       |dependencies {
+       |    testImplementation 'junit:junit:4.13.2'
+       |}
+       |test {
+       |    testLogging {
+       |        events "passed", "failed", "skipped"
+       |    }
+       |}
+       |""".stripMargin
+
+  test("gradle-mbt-test-session") {
+    client.selectedServer = Messages.ChooseBuildServer.mbt
+    cleanWorkspace()
+
+    for {
+      _ <- initialize(
+        s"""|/build.gradle
+            |$buildGradleWithJunit
+            |/src/test/java/a/FooTest2.java
+            |package a;
+            |
+            |import org.junit.Test;
+            |import static org.junit.Assert.*;
+            |
+            |public class FooTest2 {
+            |  @Test
+            |  public void testAddition() {
+            |    assertEquals(4, 2 + 2);
+            |  }
+            |}
+            |""".stripMargin
+      )
+      _ <- server.headServer.connectionProvider.buildServerPromise.future
+      _ <- server.didOpen("src/test/java/a/FooTest2.java")
+      _ <- awaitMbtTestClassDiscovery("src/test/java/a/FooTest2.java")
+      debugger <- server.startDebuggingUnresolved(
+        new DebugUnresolvedTestClassParams("a.FooTest2").toJson
+      )
+      _ <- debugger.initialize
+      _ <- debugger.launch
+      _ <- debugger.configurationDone
+      _ <- debugger.shutdown
+      output <- debugger.allOutput
+    } yield assertContains(output, "BUILD SUCCESSFUL")
+  }
+
+  test("gradle-mbt-test-breakpoint") {
+    client.selectedServer = Messages.ChooseBuildServer.mbt
+    cleanWorkspace()
+
+    val debugLayout = DebugWorkspaceLayout(
+      """|/src/test/java/a/FooTest.java
+         |package a;
+         |
+         |import org.junit.Test;
+         |import static org.junit.Assert.*;
+         |
+         |public class FooTest {
+         |  @Test
+         |  public void testAddition() {
+         |    int result = 2 + 2;
+         |>>  assertEquals(4, result);
+         |  }
+         |}
+         |""".stripMargin,
+      workspace,
+    )
+
+    val navigator = navigateExpectedBreakpoints(debugLayout)
+
+    for {
+      _ <- initialize(
+        s"""|/build.gradle
+            |$buildGradleWithJunit
+            |${debugLayout.toString}
+            |""".stripMargin
+      )
+      _ <- server.headServer.connectionProvider.buildServerPromise.future
+      _ <- server.didOpen("src/test/java/a/FooTest.java")
+      _ <- awaitMbtTestClassDiscovery("src/test/java/a/FooTest.java")
+      debugger <- server.startDebuggingUnresolved(
+        new DebugUnresolvedTestClassParams("a.FooTest").toJson,
+        navigator,
+      )
+      _ <- debugger.initialize
+      _ <- debugger.launch
+      _ <- setBreakpoints(debugger, debugLayout)
+      _ <- debugger.configurationDone
+      _ <- debugger.shutdown
+      output <- debugger.allOutput
+    } yield assertContains(output, "BUILD SUCCESSFUL")
+  }
 
   test("gradle-mbt-debug-session") {
     client.selectedServer = Messages.ChooseBuildServer.mbt
@@ -85,6 +202,6 @@ class GradleDapMbtLspSuite
       _ <- debugger.configurationDone
       _ <- debugger.shutdown
       output <- debugger.allOutput
-    } yield assertNoDiff(output, "FooBar")
+    } yield assertContains(output, "FooBar")
   }
 }

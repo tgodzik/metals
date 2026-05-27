@@ -189,7 +189,13 @@ class MbtDebugSessionStarter(
         case Right(projectFuture) =>
           projectFuture.map { project =>
             val patched =
-              patchProjectForRun(project, target, workspace, toolName)
+              patchProjectForRun(
+                project,
+                target,
+                workspace,
+                toolName,
+                isTests = true,
+              )
             val debuggee =
               if (launcher.supportsForkedTestDebug) {
                 val commandWithPort =
@@ -258,8 +264,10 @@ class MbtDebugSessionStarter(
       target: MbtTarget,
       workspace: AbsolutePath,
       toolName: String,
+      isTests: Boolean = false,
   ): DebugeeProject = {
-    val realClassDirs = target.runClassDirectories(workspace, toolName)
+    val realClassDirs =
+      target.runClassDirectories(workspace, toolName, includeTests = isTests)
     if (realClassDirs.isEmpty) {
       scribe.warn(
         s"MBT debug session: no compiled output dir for $toolName target " +
