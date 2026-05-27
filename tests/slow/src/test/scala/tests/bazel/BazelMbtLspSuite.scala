@@ -291,6 +291,10 @@ class BazelMbtLspSuite
             |      "scalaVersion": "2.13.16",
             |      "dependsOn": [
             |        "//core"
+            |      ],
+            |      "classDirectory": "<classDirectory-path>",
+            |      "configurations": [
+            |        "//app:hello"
             |      ]
             |    }
             |  }
@@ -544,6 +548,10 @@ class BazelMbtLspSuite
             |      "scalaVersion": "2.13.18",
             |      "dependsOn": [
             |        "//lib"
+            |      ],
+            |      "classDirectory": "<classDirectory-path>",
+            |      "configurations": [
+            |        "//app:main"
             |      ]
             |    }
             |  }
@@ -631,7 +639,11 @@ class BazelMbtLspSuite
             |        "org.typelevel:cats-kernel_2.13:2.13.0"
             |      ],
             |      "scalaVersion": "2.13.16",
-            |      "dependsOn": []
+            |      "dependsOn": [],
+            |      "classDirectory": "<classDirectory-path>",
+            |      "configurations": [
+            |        "//app:hello"
+            |      ]
             |    }
             |  }
             |}""".stripMargin,
