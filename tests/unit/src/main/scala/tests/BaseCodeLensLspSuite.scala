@@ -200,7 +200,9 @@ abstract class BaseCodeLensLspSuite(
         .codeLensesText(relativeFile, printCommand, minExpectedLenses)(
           maxRetries
         )
-        .recover { case _: NoSuchElementException =>
+        .recover { case e =>
+          pprint.log(e)
+          scribe.error(s"Error fetching code lenses for $relativeFile", e)
           server.textContents(relativeFile)
         }
 
