@@ -9,16 +9,19 @@ import scala.meta.internal.jdk.CollectionConverters._
 import scala.meta.internal.jsemanticdb.Semanticdb
 import scala.meta.internal.metals.EmptyReportContext
 import scala.meta.internal.metals.ReportContext
+import scala.meta.internal.metals.Report
 import scala.meta.internal.mtags.ScalametaCommonEnrichments._
 import scala.meta.internal.semanticdb.Language
 import scala.meta.internal.semanticdb.Scala._
 import scala.meta.internal.semanticdb.Schema
 import scala.meta.internal.semanticdb.TextDocument
 import scala.meta.io.AbsolutePath
+import scala.util.control.NonFatal
 
 final class Mtags(val config: MtagsConfig = MtagsConfig.default)(implicit
     val rc: ReportContext
 ) {
+
   def totalLinesOfCode: Long = lineCounts.values.asScala.sum
   def totalSymbols: Long = symbolsCount
   def totalLinesOfScala: Long =
@@ -176,7 +179,7 @@ final class Mtags(val config: MtagsConfig = MtagsConfig.default)(implicit
       input: Input.VirtualFile,
       dialect: Dialect,
       includeReferences: Boolean = false
-  ): TextDocument = {
+  ): TextDocument = try {
     addLines(language, input.text)
     val result =
       if (language == Semanticdb.Language.JAVA) {
@@ -213,6 +216,12 @@ final class Mtags(val config: MtagsConfig = MtagsConfig.default)(implicit
       .withSchema(Schema.SEMANTICDB4)
       // NOTE: we loose the protobuf language here, can only recover it from the URI.
       .withLanguage(language.toLanguage)
+  } catch {
+    case NonFatal(e) =>
+      val report =
+        Report("indexing-error", s"Error indexing file ${input.path}", e)
+      rc.unsanitized.create(() => report)
+      TextDocument()
   }
   private var symbolsCount: Long = 0L
   private val lineCounts = new ConcurrentHashMap[Semanticdb.Language, Long]
