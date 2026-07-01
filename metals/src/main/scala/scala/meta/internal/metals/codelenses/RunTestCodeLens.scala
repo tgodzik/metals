@@ -4,6 +4,7 @@ import java.util.Collections.singletonList
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
+import scala.meta.internal.semanticdb.TextDocuments
 
 import scala.meta.internal.implementation.TextDocumentWithPath
 import scala.meta.internal.metals.BaseCommand
@@ -122,6 +123,10 @@ final class RunTestCodeLens(
       for {
         _ <- confirmMainCandidates
         _ <- confirmTestCandidates
+        _ <- buildTargetClasses.onChangeAsync(
+          TextDocuments(Seq(textDocument)),
+          path,
+        )
         _ <- requestJvmEnvironment(buildTargetId, isJVM)
       } yield {
         val classes = buildTargetClasses.classesOf(buildTargetId)

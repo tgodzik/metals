@@ -78,16 +78,20 @@ final class BuildTargetClasses(
     )
 
   override def onChange(docs: TextDocuments, path: AbsolutePath): Unit = {
+    onChangeAsync(docs, path).ignoreValue
+  }
+
+  def onChangeAsync(docs: TextDocuments, path: AbsolutePath): Future[Unit] = {
     if (
-      path.isScalaFilename && hasBazelBuildServer && belongsToTestTarget(path)
+      path.isScalaOrJava && hasBazelBuildServer && belongsToTestTarget(path)
     ) {
       symbolCache.removeSymbolsForPath(path)
-      extractTestClassesFromDocuments(docs, path).foreach { testClasses =>
+      extractTestClassesFromDocuments(docs, path).map { testClasses =>
         if (testClasses.nonEmpty) {
           bazelTestClassCache.put(path, testClasses)
         }
       }
-    }
+    } else Future.unit
   }
 
   override def onDelete(path: AbsolutePath): Unit = {
@@ -569,7 +573,7 @@ final class BuildTargetClasses(
           buildTargetIds.asScala.toList.contains(target)
         }
         .map(_._1)
-        .filter(_.isScalaFilename)
+        .filter(_.isScalaOrJava)
         .toList
 
       sourceFiles.foreach { sourcePath =>
