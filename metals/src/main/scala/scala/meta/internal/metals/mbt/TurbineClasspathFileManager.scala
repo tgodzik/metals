@@ -1,11 +1,15 @@
 package scala.meta.internal.metals.mbt
 
+import java.io.InputStream
 import java.nio.file.ClosedFileSystemException
+import java.nio.file.Files
+import java.nio.file.Path
 import java.{util => ju}
 import javax.tools.FileObject
 import javax.tools.ForwardingJavaFileManager
 import javax.tools.JavaFileManager
 import javax.tools.JavaFileObject
+import javax.tools.SimpleJavaFileObject
 import javax.tools.StandardLocation
 
 import scala.collection.JavaConverters._
@@ -17,12 +21,18 @@ import scala.meta.pc.SemanticdbCompilationUnit
 
 import com.google.turbine.binder.ClassPath
 
+private class DirectoryClassfileObject(path: Path, val binaryName: String)
+    extends SimpleJavaFileObject(path.toUri, JavaFileObject.Kind.CLASS) {
+  override def openInputStream(): InputStream = Files.newInputStream(path)
+}
+
 class TurbineClasspathFileManager(
     delegate: JavaFileManager,
     workspaceClasspath: () => TurbineCompileResult,
     listSourcepath: String => java.lang.Iterable[JavaFileObject],
     isDeleted: String => Boolean,
     projectClasspath: ClassPath,
+    directoryClasspaths: Seq[Path] = Nil,
 ) extends ForwardingJavaFileManager[JavaFileManager](delegate) {
 
   override def contains(
@@ -44,6 +54,8 @@ class TurbineClasspathFileManager(
         file match {
           case c: TurbineClassfileObject =>
             c.binaryName
+          case d: DirectoryClassfileObject =>
+            d.binaryName
           case _ =>
             super.inferBinaryName(location, file)
         }
@@ -113,6 +125,44 @@ class TurbineClasspathFileManager(
           )
         } listPackageClasspath(cp, packageNames, isAddedBinaryName) { obj =>
           objects.add(obj)
+        }
+        if (
+          directoryClasspaths.nonEmpty && kinds.contains(
+            JavaFileObject.Kind.CLASS
+          )
+        ) {
+          val packageRelPath =
+            packageName.replace('.', java.io.File.separatorChar)
+          for (dir <- directoryClasspaths) {
+            val pkgDir = dir.resolve(packageRelPath)
+            if (Files.isDirectory(pkgDir)) {
+              try {
+                val stream = Files.list(pkgDir)
+                try {
+                  stream.forEach { p =>
+                    val fileName = p.getFileName.toString
+                    if (fileName.endsWith(".class")) {
+                      val simpleName = fileName.stripSuffix(".class")
+                      val dotBinaryName =
+                        if (packageName.nonEmpty)
+                          packageName + "." + simpleName
+                        else simpleName
+                      val slashBinaryName = dotBinaryName.replace('.', '/')
+                      if (isAddedBinaryName.add(slashBinaryName)) {
+                        objects.add(
+                          new DirectoryClassfileObject(p, dotBinaryName)
+                        )
+                      }
+                    }
+                  }
+                } finally {
+                  stream.close()
+                }
+              } catch {
+                case _: java.io.IOException =>
+              }
+            }
+          }
         }
         objects
       case StandardLocation.SOURCE_PATH =>

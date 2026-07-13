@@ -107,7 +107,11 @@ object TurbineCompiler {
           ImmutableSet.copyOf(annotationProcessing.processors.asJava),
           Processing.processorLoader(
             ImmutableList.copyOf(
-              annotationProcessing.processorPath.map(_.toString).asJava
+              (annotationProcessing.processorPath ++ validClasspaths(
+                classpath
+              )).distinct
+                .map(_.toString)
+                .asJava
             ),
             ImmutableSet.of(),
           ),
@@ -157,6 +161,9 @@ class TurbineCompiler[T](
     sleeper: Sleeper,
     onIndexingDone: () => Unit,
     onNewProjectClasspath: ClassPath => Unit,
+    annotationProcessorStubsDir: Option[Path] = None,
+    onAnnotationProcessorStubsReady: () => Unit = () => (),
+    projectStubsDir: Option[Path] = None,
 )(implicit ec: ExecutionContext, rc: ReportContext) {
   private val sourcepathByPackageName =
     TrieMap.empty[String, ju.concurrent.ConcurrentLinkedDeque[
@@ -205,18 +212,42 @@ class TurbineCompiler[T](
     )
   }
 
+  private def writeStubs(dir: Path, onDone: () => Unit = () => ()): Unit =
+    try {
+      Files.createDirectories(dir)
+      for {
+        (_, symbols) <- result.symbolsByPackage
+        sym <- symbols.asScala
+        bytes <- Option(result.lowered.bytes().get(sym.binaryName()))
+      } {
+        val classFile = dir.resolve(sym.binaryName() + ".class")
+        Files.createDirectories(classFile.getParent)
+        Files.write(classFile, bytes)
+      }
+      onDone()
+    } catch {
+      case NonFatal(e) =>
+        scribe.warn(s"[TurbineCompiler] failed to write stubs: ${e.getMessage}")
+    }
+
   var result = TurbineCompiler.emptyResult
   def doCompileNow(): TurbineCompileResult = {
+    val apOpts = annotationProcessingOptions()
     result = TurbineCompiler.compileClassfiles(
       allCompilationUnits(),
       parseUnit,
       classpath(),
-      annotationProcessingOptions(),
+      apOpts,
       progressBars,
     )
     cleanup()
     // Clear deleted binary names after recompile - they are no longer in the compiled output
     deletedBinaryNames.clear()
+    projectStubsDir.foreach(writeStubs(_))
+    if (apOpts.isEnabled)
+      annotationProcessorStubsDir.foreach(dir =>
+        writeStubs(dir, onAnnotationProcessorStubsReady)
+      )
     onIndexingDone()
     result
   }
@@ -279,21 +310,38 @@ class TurbineCompiler[T](
   def createFileManager(
       underlying: StandardJavaFileManager,
       projectClasspathJars: ju.List[Path],
+      workspaceSourcepath: String => java.lang.Iterable[JavaFileObject] = _ =>
+        ju.Collections.emptyList(),
   ): JavaFileManager = {
-    val isGlobalClasspathEntry = this.classpath().toSet
-    val filteredProjectClasspath =
-      projectClasspathJars.asScala.filter(file =>
-        !isGlobalClasspathEntry(file) && TurbineCompiler.isJarFile(file)
-      )
+    val entries = projectClasspathJars.asScala
+    val filteredProjectClasspath = entries.filter(TurbineCompiler.isJarFile)
+    val directoryClasspaths = entries.filter(Files.isDirectory(_)).toSeq
     val projectClasspath =
       ClassPathBinder.bindClasspath(filteredProjectClasspath.asJava)
     onNewProjectClasspath(projectClasspath)
     new TurbineClasspathFileManager(
       underlying,
       () => result,
-      listSourcepath = listCombinedSourcepath,
+      listSourcepath = (packageName: String) => {
+        val workspaceFiles = workspaceSourcepath(packageName)
+        val workspaceIt = workspaceFiles.iterator()
+        if (!workspaceIt.hasNext()) {
+          listCombinedSourcepath(packageName)
+        } else {
+          val seenNames = new ju.HashSet[String]()
+          val combined = new ju.ArrayList[JavaFileObject]()
+          listCombinedSourcepath(packageName).forEach { obj =>
+            if (seenNames.add(obj.getName())) combined.add(obj)
+          }
+          workspaceIt.forEachRemaining { obj =>
+            if (seenNames.add(obj.getName())) combined.add(obj)
+          }
+          combined
+        }
+      },
       isDeleted,
       projectClasspath,
+      directoryClasspaths,
     )
   }
 

@@ -3,6 +3,7 @@ package scala.meta.internal.metals.mbt.importer
 import java.nio.file.Files
 import java.nio.file.Path
 
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.xml.XML
@@ -66,7 +67,13 @@ abstract class BazelMbtImporter(
         dependencyModules,
         repositoryName,
       )
-      scalaVersionFromDeps <- queryScalaVersionFromDeps()
+      plugins <- queryJavaPlugins(targets)
+      annotatedModules = applyPluginInfo(
+        dependencyModules,
+        plugins,
+        repositoryName,
+      )
+      scalaVersionFromDeps <- queryScalaVersionFromDeps(targets)
       effectiveScalaVersion <- scalaVersionFromDeps match {
         case Some(value) => Future.successful(Some(value))
         case None => queryScalaVersion(targets)
@@ -79,7 +86,7 @@ abstract class BazelMbtImporter(
         javacOptions,
         deps,
         externalDepModules,
-        dependencyModules,
+        annotatedModules,
         effectiveScalaVersion,
       )
       _ <- Future(Files.writeString(out.toNIO, MbtBuild.toJson(build)))
@@ -248,10 +255,61 @@ abstract class BazelMbtImporter(
     withoutDoubleAt.replaceAll("~[^/]+", "")
   }
 
-  private def queryScalaVersionFromDeps(): Future[Option[String]] =
-    runBazelQueryLines(s"filter('scala.library', deps(//...))").map { lines =>
-      lines.flatMap(extractScalaVersionFromLabel).headOption
+  private def queryJavaPlugins(
+      targets: List[String]
+  ): Future[Seq[(String, Seq[String])]] =
+    if (targets.isEmpty) Future.successful(Nil)
+    else
+      runBazelQueryXml(
+        s"kind(java_plugin, deps(set(${targets.mkString(" ")})))"
+      ).map(BazelMbtImporter.pluginsFromQueryXml)
+
+  private def applyPluginInfo(
+      modules: Seq[MbtDependencyModule],
+      plugins: Seq[(String, Seq[String])],
+      repositoryName: String,
+  ): Seq[MbtDependencyModule] = {
+    if (plugins.isEmpty) return modules
+
+    val labelToModuleId: Map[String, String] = modules.flatMap { m =>
+      bazelLabelFromModuleId(m.id, repositoryName).map(_ -> m.id)
+    }.toMap
+
+    val processorClassesByModuleId =
+      mutable.HashMap.empty[String, mutable.Set[String]]
+    for {
+      (processorClass, depLabels) <- plugins
+      label <- depLabels
+    } {
+      val normalized = normalizeBazelLabel(label)
+      labelToModuleId.get(normalized).foreach { moduleId =>
+        processorClassesByModuleId
+          .getOrElseUpdate(moduleId, mutable.Set.empty)
+          .add(processorClass)
+      }
     }
+
+    modules.map { m =>
+      processorClassesByModuleId.get(m.id) match {
+        case None => m
+        case Some(classes) =>
+          val list = new java.util.ArrayList[String]()
+          classes.toSeq.sorted.foreach(list.add)
+          m.copy(annotationProcessors = list)
+      }
+    }
+  }
+
+  private def queryScalaVersionFromDeps(
+      targets: List[String]
+  ): Future[Option[String]] =
+    if (targets.isEmpty) Future.successful(None)
+    else
+      runBazelQueryLines(
+        s"filter('scala.library', deps(set(${targets.mkString(" ")})))"
+      ).map { lines =>
+        lines.flatMap(extractScalaVersionFromLabel).headOption
+      }
 
   private def queryScalaVersion(
       @annotation.nowarn("msg=never used") targets: List[String]
@@ -340,6 +398,11 @@ abstract class BazelMbtImporter(
               "bazel-mbt: query cancelled"
             )
           )
+        case 3 =>
+          scribe.warn(
+            s"bazel-mbt: bazel query had errors (exit code 3), results may be incomplete"
+          )
+          Future.successful(buf.toString)
         case code =>
           Future.failed(
             new Exception(s"bazel-mbt: bazel query failed with exit code $code")
@@ -350,6 +413,22 @@ abstract class BazelMbtImporter(
 }
 
 object BazelMbtImporter {
+
+  def pluginsFromQueryXml(
+      xml: String
+  ): Seq[(String, Seq[String])] = {
+    if (xml.isBlank) return Nil
+    val root = XML.loadString(xml)
+    for {
+      rule <- (root \\ "rule").toSeq
+      if (rule \ "@class").text == "java_plugin"
+      processorClass <- stringsFromRuleAttribute(
+        rule,
+        "processor_class",
+      ).headOption.toSeq
+      depLabels = labelsFromRuleAttribute(rule, Some("deps"))
+    } yield (processorClass, depLabels.toSeq)
+  }
 
   private[importer] def depsFromQueryXml(
       xml: String
