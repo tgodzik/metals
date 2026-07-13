@@ -21,6 +21,7 @@ import scala.meta.internal.jpc.JavaPresentationCompiler
 import scala.meta.internal.metals.Configs.SourcePathConfig
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.mbt.GitVCS
+import scala.meta.internal.metals.mbt.MbtAnnotationProcessingOptions
 import scala.meta.internal.metals.mbt.MbtBuild
 import scala.meta.internal.metals.mbt.MbtWorkspaceSymbolProvider
 import scala.meta.internal.mtags.Mtags
@@ -62,6 +63,27 @@ class CompilerConfiguration(
 )(implicit ec: ExecutionContextExecutorService, rc: ReportContext) {
 
   private val plugins = new CompilerPlugins()
+
+  /**
+   * Returns a stable, per-build-target output directory for annotation-processor-generated
+   * class files.  The Scala presentation compiler is given this directory on
+   * its classpath so it can see AP-generated symbols.
+   */
+  def annotationProcessorOutputDir(
+      buildTargetId: BuildTargetIdentifier
+  ): java.nio.file.Path = {
+    import scala.meta.internal.mtags.MD5
+    val hash = MD5.compute(buildTargetId.getUri())
+    workspace
+      .resolve(Directories.outDir)
+      .resolve("ap-cp")
+      .resolve(hash)
+      .toNIO
+  }
+
+  def mbtOutDir: Path =
+    workspace.resolve(Directories.outDir).resolve("mbt-out").toNIO
+
   val fallbackClasspaths = new FallbackClasspaths(
     workspace,
     buildTargets,
@@ -365,10 +387,35 @@ class CompilerConfiguration(
           Nil
         }
 
+      val annotationProcessorClasspath: Seq[Path] = {
+        val isMbtTarget = mbtBuild().mbtTargets.exists(_.id == scalaTarget.id)
+        if (isMbtTarget) {
+          val hasMbtProcessors = mbtBuild().mbtTargets
+            .find(_.id == scalaTarget.id)
+            .exists(t => MbtAnnotationProcessingOptions.fromTarget(t).isEnabled)
+          if (hasMbtProcessors)
+            Seq(annotationProcessorOutputDir(scalaTarget.id))
+          else Nil
+        } else {
+          val hasBspProcessors = buildTargets
+            .javaTarget(scalaTarget.id)
+            .exists(_.javac.processorOptions.nonEmpty)
+          val hasMbtFallbackProcessors =
+            !hasBspProcessors && mbtBuild().mbtTargets
+              .find(_.id == scalaTarget.id)
+              .exists(t =>
+                MbtAnnotationProcessingOptions.fromTarget(t).isEnabled
+              )
+          if (hasBspProcessors || hasMbtFallbackProcessors)
+            Seq(annotationProcessorOutputDir(scalaTarget.id))
+          else Nil
+        }
+      }
+
       fromMtags(
         mtags,
         nonBestEffortOptions,
-        classpath ++ additionalClasspath ++ bestEffortDirs ++ selfBestEffortDir ++ fallbackScalaLib,
+        classpath ++ additionalClasspath ++ bestEffortDirs ++ selfBestEffortDir ++ fallbackScalaLib ++ annotationProcessorClasspath,
         name,
         search,
         referenceCounter,
@@ -430,15 +477,32 @@ class CompilerConfiguration(
       val shouldUseOpts = featureFlags
         .readBoolean(FeatureFlag.JAVAC_OPTIONS)
         .orElse(false)
-      val options = javaTarget match {
-        case j: JavaTarget if shouldUseOpts => j.options
+      val explicitJavaTarget = javaTarget match {
+        case j: JavaTarget => Some(j)
+        case _ => buildTargets.javaTarget(buildTargetId)
+      }
+      val options = explicitJavaTarget match {
+        case Some(j) if shouldUseOpts => j.options
         case _ => Nil
       }
+      val processorOpts = explicitJavaTarget
+        .map(_.javac.processorOptions)
+        .getOrElse(Nil)
+      val hasMbtProcessors = mbtBuild().mbtTargets
+        .find(_.id == buildTargetId)
+        .exists(t => MbtAnnotationProcessingOptions.fromTarget(t).isEnabled)
+      val annotationProcessorClasspath: Seq[Path] =
+        if (hasMbtProcessors) Seq(annotationProcessorOutputDir(buildTargetId))
+        else Nil
+      val annotationProcessingOptions: Seq[String] =
+        if (hasMbtProcessors) List("-proc:none") else Nil
       configure(pc, search, completionItemPriority)
         .newInstance(
           buildTargetId.getUri(),
-          classpath.asJava,
-          options.asJava,
+          (classpath ++ annotationProcessorClasspath).asJava,
+          (options ++
+            (if (hasMbtProcessors) Nil else processorOpts) ++
+            annotationProcessingOptions).asJava,
           srcFiles,
         )
     }
