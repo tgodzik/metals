@@ -76,7 +76,7 @@ object V {
 
   val scalafmt = "3.11.4"
 
-  val scalameta = "4.17.0"
+  val scalameta = "4.14.1-next-SNAPSHOT"
 
   val scribe = "3.19.0"
 
@@ -161,8 +161,7 @@ object V {
     ("org.eclipse.platform" % "org.eclipse.text" % "3.9.0").exclude("*", "*"),
   )
 
-  def semanticdb(scalaVersion: String) =
-    SemanticDbSupport.last.getOrElse(scalaVersion, scalameta)
+  def semanticdb(scalaVersion: String) = "4.14.1-next-SNAPSHOT"
 
   def isNightliesEnabled: Boolean =
     sys.env.get("CI").isDefined || sys.env.get("NIGHTLIES").isDefined
