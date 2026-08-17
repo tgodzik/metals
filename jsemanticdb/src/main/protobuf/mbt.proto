@@ -15,7 +15,25 @@ option java_package = "scala.meta.internal.jmbt";
 // `Index` message with a single document.  When reading, you need to decode one
 // tag at a time, which may require custom code depending on language bindings
 // you're using.
-message Index { repeated IndexedDocument documents = 1; }
+//
+// Field 2 (`test_discovery`) is typically written once at the start of the
+// file as a standalone Index message; protobuf merge semantics combine it with
+// the per-document Index messages that follow.
+message Index {
+  repeated IndexedDocument documents = 1;
+  TestDiscoveryIndex test_discovery = 2;
+}
+
+// Global derived state for MBT test-suite candidate discovery. Seeded from the
+// test-framework symbol registry and extended with top-level types defined in
+// files that match the closure (so custom base suites are found transitively).
+message TestDiscoveryIndex {
+  // Digest of the framework registry symbols used as seeds. When this does not
+  // match the current registry, the closure must be recomputed from scratch.
+  string registry_digest = 1;
+  // Transitive set of type symbols that count as test base types.
+  repeated string base_symbol = 2;
+}
 
 message SymbolInformation {
   // A SemanticDB symbol.
@@ -76,4 +94,17 @@ message IndexedDocument {
   // the identifiers in these files to power repo-wide "Find References".
   bytes bloom_filter = 7;
   BloomFilterVersion bloom_filter_version = 8;
+
+  // Distinguishes "computed, no candidates" from "not computed yet". Older
+  // index files leave this unset (false), forcing a one-time recompute.
+  bool has_test_discovery_data = 10;
+  // True when this document's bloom filter matches the current test base
+  // closure (references an annotation or base parent, transitively).
+  bool matches_test_closure = 11;
+  // Top-level class/object symbols that are potential test suites when
+  // matches_test_closure is true.
+  repeated string test_candidate_symbol = 12;
+  // Potential main-class symbols derived from this document (@main, App,
+  // main methods). Independent of the test closure.
+  repeated string main_candidate_symbol = 13;
 }

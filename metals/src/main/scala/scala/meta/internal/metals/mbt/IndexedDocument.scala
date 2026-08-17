@@ -25,6 +25,22 @@ import scala.meta.pc.SemanticdbCompilationUnit
 import com.google.protobuf.ByteString
 
 /**
+ * Derived test/main discovery data for a single indexed document.
+ *
+ * @param matchesTestClosure true when the document's bloom filter matches the
+ *   current test-base closure (annotation or base-parent reference).
+ * @param testCandidateSymbols top-level class/object symbols that are potential
+ *   test suites when [[matchesTestClosure]] is true.
+ * @param mainCandidateSymbols potential main-class symbols (@main, App, main
+ *   methods) derived from this document alone.
+ */
+case class TestDiscoveryData(
+    matchesTestClosure: Boolean,
+    testCandidateSymbols: Seq[String],
+    mainCandidateSymbols: Seq[String],
+)
+
+/**
  * A sibling Scala data structure for the Protubf message `Mbt.IndexedDocument`,
  * which contains parsed data like a loaded bloom filter and `AbsolutePath`
  * instead of a string URI.
@@ -37,6 +53,7 @@ case class IndexedDocument(
     language: Semanticdb.Language,
     symbols: collection.Seq[Mbt.SymbolInformation],
     bloomFilter: StringBloomFilter,
+    testDiscovery: Option[TestDiscoveryData] = None,
 ) {
   // Cached generated Java outlines from proto files.
   // This is lazily populated and automatically invalidated when
@@ -99,7 +116,7 @@ case class IndexedDocument(
       case Language.PROTOBUF => Mbt.IndexedDocument.BloomFilterVersion.V9
       case _ => Mbt.IndexedDocument.BloomFilterVersion.V6
     }
-    Mbt.IndexedDocument
+    val builder = Mbt.IndexedDocument
       .newBuilder()
       .setUri(file.toURI.toString)
       .setOid(oid)
@@ -109,7 +126,18 @@ case class IndexedDocument(
       .addAllSymbols(symbols.asJava)
       .setBloomFilter(ByteString.copyFrom(bloomFilter.toBytes))
       .setBloomFilterVersion(bloomFilterVersion)
+    testDiscovery.foreach { data =>
+      builder
+        .setHasTestDiscoveryData(true)
+        .setMatchesTestClosure(data.matchesTestClosure)
+        .addAllTestCandidateSymbol(data.testCandidateSymbols.asJava)
+        .addAllMainCandidateSymbol(data.mainCandidateSymbols.asJava)
+    }
+    builder
   }
+
+  def withTestDiscovery(data: TestDiscoveryData): IndexedDocument =
+    copy(testDiscovery = Some(data))
 }
 
 object IndexedDocument {
@@ -251,6 +279,16 @@ object IndexedDocument {
       path: AbsolutePath,
       doc: Mbt.IndexedDocument,
   ): IndexedDocument = {
+    val testDiscovery =
+      if (doc.getHasTestDiscoveryData) {
+        Some(
+          TestDiscoveryData(
+            matchesTestClosure = doc.getMatchesTestClosure,
+            testCandidateSymbols = doc.getTestCandidateSymbolList.asScala.toSeq,
+            mainCandidateSymbols = doc.getMainCandidateSymbolList.asScala.toSeq,
+          )
+        )
+      } else None
     IndexedDocument(
       file = path,
       oid = doc.getOid(),
@@ -260,6 +298,7 @@ object IndexedDocument {
       symbols = doc.getSymbolsList().asScala,
       bloomFilter =
         StringBloomFilter.fromBytes(doc.getBloomFilter().toByteArray),
+      testDiscovery = testDiscovery,
     )
   }
 

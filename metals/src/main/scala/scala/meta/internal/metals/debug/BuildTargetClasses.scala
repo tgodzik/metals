@@ -58,6 +58,9 @@ final class BuildTargetClasses(
 
   private val MbtSemanticdbBatchSize = 50
 
+  /** Last MBT candidate-index generation that was aggregated into [[index]]. */
+  @volatile private var lastMbtIndexGeneration: Long = -1L
+
   type JVMRunEnvironmentsMap =
     TrieMap[b.BuildTargetIdentifier, b.JvmEnvironmentItem]
 
@@ -212,11 +215,9 @@ final class BuildTargetClasses(
                 .map(cacheTestClasses(classes, _))
             }
 
-          val populateMbtClasses =
+          val populateMbtCandidates =
             if (MbtBuildServer.isMbtServer(connection.name)) {
-              populateMbtMainClasses(classes, targets0).flatMap { _ =>
-                populateMbtTestClasses(classes, targets0)
-              }
+              populateMbtClasses(classes, targets0)
             } else Future.unit
 
           for {
@@ -224,7 +225,7 @@ final class BuildTargetClasses(
             _ <- updateTestClasses
             _ <- workDoneProgress.trackFuture(
               "Discovering main classes and tests",
-              populateMbtClasses,
+              populateMbtCandidates,
             )
           } yield {
             targetsList.forEach(invalidate)
@@ -605,102 +606,130 @@ final class BuildTargetClasses(
   }
 
   /**
-   * Populates candidate test classes from the MBT index WITHOUT loading semanticdb.
-   * The candidates are stored in `candidateTestClasses` and will be confirmed
-   * lazily when:
+   * Populates candidate main and test classes from the MBT OID-keyed side
+   * indexes WITHOUT loading semanticdb. Short-circuits when the MBT candidate
+   * index generation has not changed since the last aggregation, so didOpen /
+   * didFocus / post-compile rebuildIndex calls do no work.
+   *
+   * Candidates are confirmed lazily when:
    * - A file is opened (for code lenses or test explorer)
    * - User explicitly requests test discovery (test explorer opened)
-   *
-   * This optimization avoids the expensive semanticdb loading at startup.
    */
-  private def populateMbtTestClasses(
+  private def populateMbtClasses(
       classes: Map[b.BuildTargetIdentifier, Classes],
       targets: Seq[b.BuildTargetIdentifier],
   ): Future[Unit] = Future {
     mbt() match {
       case None =>
-        scribe.warn("mbt-test: MBT workspace symbol provider is not available.")
+        scribe.warn(
+          "mbt-classes: MBT workspace symbol provider is not available."
+        )
       case Some(mbtProvider) =>
-        val targetSet = targets.toSet
-
-        val candidates = mbtProvider.candidateTestClasses(
-          filterPath = path =>
-            path.isScalaOrJava &&
-              buildTargets.inverseSourcesAll(path).exists(targetSet),
-          annotationSymbols = TestFrameworkSymbolRegistry.annotationSymbols,
-          baseParentSymbols = TestFrameworkSymbolRegistry.baseParentSymbols,
-        )
-
-        // Group candidates by path
-        val candidatesByPath = candidates
-          .groupBy(_.path)
-          .view
-          .mapValues(
-            _.map(c =>
-              BuildTargetClasses.TestClassCandidate(c.path, c.candidateSymbol)
-            )
+        // Drain any pending closure expansions from live edits before reading
+        // the generation, so newly introduced base suites are visible.
+        mbtProvider.ensureTestDiscoveryReady()
+        val generation = mbtProvider.indexGeneration
+        if (generation == lastMbtIndexGeneration) {
+          // fetchClasses builds fresh Classes maps; re-attach previously
+          // aggregated MBT state so the subsequent index.put does not wipe it.
+          for ((targetId, newClasses) <- classes) {
+            index.get(targetId).foreach(copyMbtClassState(_, newClasses))
+          }
+          scribe.debug(
+            s"mbt-classes: reusing candidates (generation=$generation unchanged)"
           )
-          .toMap
+        } else {
+          val targetSet = targets.toSet
 
-        // Store candidates in the appropriate target classes
-        for {
-          (path, pathCandidates) <- candidatesByPath
-          targetId <- buildTargets.inverseSourcesAll(path).filter(targetSet)
-        } {
-          classes(targetId).appendCandidateTestClasses(path, pathCandidates)
+          def pathInTargets(path: AbsolutePath): Boolean =
+            path.isScalaOrJava &&
+              buildTargets.inverseSourcesAll(path).exists(targetSet)
+
+          val testCandidates = mbtProvider.candidateTestClasses(
+            filterPath = pathInTargets,
+            annotationSymbols = TestFrameworkSymbolRegistry.annotationSymbols,
+            baseParentSymbols = TestFrameworkSymbolRegistry.baseParentSymbols,
+          )
+          val mainCandidates = mbtProvider.candidateMainClasses(pathInTargets)
+
+          val testByPath = testCandidates.groupBy(_.path)
+          val mainByPath = mainCandidates.groupBy(_.path)
+          val allPaths = testByPath.keySet ++ mainByPath.keySet
+
+          for {
+            path <- allPaths
+            targetIds = buildTargets.inverseSourcesAll(path).filter(targetSet)
+            targetId <- targetIds
+          } {
+            testByPath.get(path).foreach { pathCandidates =>
+              classes(targetId).appendCandidateTestClasses(
+                path,
+                pathCandidates.map(c =>
+                  BuildTargetClasses.TestClassCandidate(
+                    c.path,
+                    c.candidateSymbol,
+                  )
+                ),
+              )
+            }
+            mainByPath.get(path).foreach { pathCandidates =>
+              classes(targetId).appendCandidateMainClasses(
+                path,
+                pathCandidates.map(c =>
+                  BuildTargetClasses.MainClassCandidate(
+                    c.path,
+                    c.candidateSymbol,
+                  )
+                ),
+              )
+            }
+          }
+
+          // Preserve already-confirmed suites/mains across rebuilds.
+          for ((targetId, newClasses) <- classes) {
+            index.get(targetId).foreach { old =>
+              old.testClasses.foreach { case (symbol, info) =>
+                old.confirmedMbtTestClassFile.get(
+                  info.fullyQualifiedName
+                ) match {
+                  case Some(source) =>
+                    newClasses.putTestClass(symbol, info, source)
+                  case None =>
+                    newClasses.putTestClass(symbol, info)
+                }
+              }
+              old.mainClasses.foreach { case (symbol, mainClass) =>
+                if (!newClasses.mainClasses.contains(symbol)) {
+                  newClasses.putMainClass(symbol, mainClass)
+                }
+              }
+            }
+          }
+
+          lastMbtIndexGeneration = mbtProvider.indexGeneration
+          scribe.debug(
+            s"mbt-classes: stored ${testCandidates.size} test and ${mainCandidates.size} main " +
+              s"candidates from ${allPaths.size} files (generation=$lastMbtIndexGeneration)"
+          )
         }
-
-        scribe.debug(
-          s"mbt-test: stored ${candidates.size} test class candidates from ${candidatesByPath.size} files"
-        )
     }
   }
 
-  /**
-   * Populates candidate main classes from the MBT index WITHOUT loading semanticdb.
-   * The candidates are stored in `candidateMainClasses` and will be confirmed
-   * lazily when:
-   * - A file is opened (for code lenses)
-   * - User runs test from config and uses discovery
-   *
-   * This optimization avoids the expensive semanticdb loading at startup.
-   */
-  private def populateMbtMainClasses(
-      classes: Map[b.BuildTargetIdentifier, Classes],
-      targets: Seq[b.BuildTargetIdentifier],
-  ): Future[Unit] = Future {
-    mbt() match {
-      case None =>
-        scribe.warn("mbt-run: MBT workspace symbol provider is not available.")
-      case Some(mbtProvider) =>
-        val targetSet = targets.toSet
-
-        val candidates = mbtProvider.candidateMainClasses(path =>
-          path.isScalaOrJava &&
-            buildTargets.inverseSourcesAll(path).exists(targetSet)
-        )
-        // Group candidates by path
-        val candidatesByPath = candidates
-          .groupBy(_.path)
-          .view
-          .mapValues(
-            _.map(c =>
-              BuildTargetClasses.MainClassCandidate(c.path, c.candidateSymbol)
-            )
-          )
-          .toMap
-
-        // Store candidates in the appropriate target classes
-        for {
-          (path, pathCandidates) <- candidatesByPath
-          targetId <- buildTargets.inverseSourcesAll(path).filter(targetSet)
-        } {
-          classes(targetId).appendCandidateMainClasses(path, pathCandidates)
-        }
-
-        scribe.debug(
-          s"mbt-run: stored ${candidates.size} main class candidates from ${candidatesByPath.size} files"
-        )
+  private def copyMbtClassState(from: Classes, to: Classes): Unit = {
+    from.candidateTestClasses.foreach { case (path, candidates) =>
+      to.appendCandidateTestClasses(path, candidates)
+    }
+    from.candidateMainClasses.foreach { case (path, candidates) =>
+      to.appendCandidateMainClasses(path, candidates)
+    }
+    from.testClasses.foreach { case (symbol, info) =>
+      from.confirmedMbtTestClassFile.get(info.fullyQualifiedName) match {
+        case Some(source) => to.putTestClass(symbol, info, source)
+        case None => to.putTestClass(symbol, info)
+      }
+    }
+    from.mainClasses.foreach { case (symbol, mainClass) =>
+      to.putMainClass(symbol, mainClass)
     }
   }
 

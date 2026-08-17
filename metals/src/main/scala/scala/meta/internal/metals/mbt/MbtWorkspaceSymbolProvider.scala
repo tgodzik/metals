@@ -8,9 +8,12 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.util.Comparator
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import java.{util => ju}
 import javax.tools.JavaFileManager
 import javax.tools.JavaFileObject
@@ -18,7 +21,6 @@ import javax.tools.StandardJavaFileManager
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashSet
 import scala.collection.parallel.mutable.ParArray
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
@@ -33,7 +35,6 @@ import scala.meta.inputs.Input
 import scala.meta.internal.infra.NoopMonitoringClient
 import scala.meta.internal.jmbt.Mbt
 import scala.meta.internal.jpc.SourceJavaFileObject
-import scala.meta.internal.jsemanticdb.Semanticdb
 import scala.meta.internal.metals.BaseFallbackClasspaths
 import scala.meta.internal.metals.BaseWorkDoneProgress
 import scala.meta.internal.metals.Buffers
@@ -45,7 +46,6 @@ import scala.meta.internal.metals.Configs.WorkspaceSymbolProviderConfig
 import scala.meta.internal.metals.Directories
 import scala.meta.internal.metals.EmptyFallbackClasspaths
 import scala.meta.internal.metals.EmptyWorkDoneProgress
-import scala.meta.internal.metals.FingerprintedCharSequence
 import scala.meta.internal.metals.LoggerReportContext
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.ReportContext
@@ -312,6 +312,50 @@ class MbtWorkspaceSymbolProvider(
     override def compare(o1: Path, o2: Path): Int = o1.compareTo(o2)
   }
 
+  // --- OID-keyed test/main candidate cache ---------------------------------
+  // Global transitive set of test base-type symbols (framework seeds + custom
+  // base suites discovered in the workspace). Guarded by registry digest.
+  private val testBaseClosure =
+    new AtomicReference[Set[String]](Set.empty)
+  @volatile private var testClosureFingerprints: Seq[CharSequence] = Nil
+  @volatile private var testDiscoveryRegistryDigest: Option[String] = None
+  // Side indexes: path -> candidate symbols. Avoids scanning the full index on
+  // every BuildTargetClasses.rebuildIndex call.
+  private val testCandidateDocuments =
+    TrieMap.empty[AbsolutePath, Seq[String]]
+  private val mainCandidateDocuments =
+    TrieMap.empty[AbsolutePath, Seq[String]]
+  // Top-level types defined in newly-matched files that are not yet in the
+  // closure; drained by a delta scan after indexing.
+  private val pendingClosureAdditions =
+    ConcurrentHashMap.newKeySet[String]()
+  // Bumped whenever candidate side indexes change so BuildTargetClasses can
+  // short-circuit rebuildIndex when nothing new was discovered.
+  private val indexGenerationCounter = new AtomicLong(0L)
+  private val testClosureFullScanCount = new AtomicInteger(0)
+
+  /** Generation of the candidate side indexes; increments on candidate changes. */
+  def indexGeneration: Long = indexGenerationCounter.get()
+
+  /** Number of full workspace BFS scans performed (for tests/metrics). */
+  def testClosureFullScans: Int = testClosureFullScanCount.get()
+
+  /**
+   * Testing-only: force the next [[ensureTestDiscoveryReady]] to recompute the
+   * closure from scratch (simulates a registry digest mismatch).
+   */
+  def invalidateTestDiscoveryCacheForTesting(): Unit = synchronized {
+    testDiscoveryRegistryDigest = None
+    testBaseClosure.set(Set.empty)
+    testClosureFingerprints = Nil
+    pendingClosureAdditions.clear()
+    testCandidateDocuments.clear()
+    mainCandidateDocuments.clear()
+    documents.foreach { case (path, doc) =>
+      documents.put(path, doc.copy(testDiscovery = None))
+    }
+  }
+
   // The source of truth for what files belong to the workspace, and their attached indexed data.
   // DO NOT update this map directly since have a couple derivative collections.
   // Instead, use the following methods to update the index:
@@ -423,6 +467,10 @@ class MbtWorkspaceSymbolProvider(
       Event.duration("mbt2_index_workspace_symbol_pre_write", timer.elapsed)
     )
 
+    // Ensure the OID-keyed test/main candidate cache is up to date before we
+    // persist the index, so the next startup can skip the workspace-wide BFS.
+    ensureTestDiscoveryReady()
+
     // Step 4: Write the index to disk. It's technically fine to move writing
     // the index to a background job.  Might be worth doing someday.
     writeIndex()
@@ -493,6 +541,7 @@ class MbtWorkspaceSymbolProvider(
     documents.remove(file) match {
       case None => Future.unit
       case Some(doc) =>
+        removeFromCandidateIndexes(file)
         updateDocumentsKeys(documents)
         // Remove from package index
         for {
@@ -687,82 +736,22 @@ class MbtWorkspaceSymbolProvider(
    * 1. Symbols ending in "#main()." or ".main()." (Java/Scala main methods)
    * 2. Files referencing "scala/main#" (@main annotation)
    * 3. Files referencing "scala/App#" (App trait extension)
+   *
+   * Results come from the OID-keyed side index maintained during indexing.
    */
   def candidateMainClasses(
       filterPath: AbsolutePath => Boolean
   ): Seq[BuildTargetClasses.MainClassCandidate] = {
+    ensureTestDiscoveryReady()
     val candidates =
       scala.collection.mutable.ArrayBuffer
         .empty[BuildTargetClasses.MainClassCandidate]
-    val javaMain = "#main()."
-    val scalaMain = ".main()."
-    val mainAnnotRef = FingerprintedCharSequence.fuzzyReference("scala/main#")
-    val appRef = FingerprintedCharSequence.fuzzyReference("scala/App#")
-    val pathsFromMainSymbols =
-      queryWorkspaceSymbol("main")
-        .flatMap(info => Option(info.getLocation()))
-        .map(_.getUri.toAbsolutePath)
-    val pathsFromReferences =
-      possibleReferences(
-        MbtPossibleReferencesParams(
-          references = Seq(mainAnnotRef.value.toString, appRef.value.toString)
-        )
-      )
     for {
-      path <- pathsFromMainSymbols.distinct
+      (path, symbols) <- mainCandidateDocuments
       if filterPath(path)
-      doc <- documents.get(path).toList
+      symbol <- symbols
     } {
-
-      // Check for main method symbols in the document
-      for (symbolInfo <- doc.symbols) {
-        val symbol = symbolInfo.getSymbol()
-        // Java main method pattern: com/example/Main#main().
-        if (symbol.endsWith(javaMain)) {
-          val classSymbol = symbol.stripSuffix("main().")
-          candidates += BuildTargetClasses.MainClassCandidate(path, classSymbol)
-        }
-        // Scala main method pattern: com/example/Main.main().
-        else if (symbol.endsWith(scalaMain)) {
-          val objectSymbol = symbol.stripSuffix("main().")
-          candidates += BuildTargetClasses.MainClassCandidate(
-            path,
-            objectSymbol,
-          )
-        }
-      }
-    }
-
-    for {
-      path <- pathsFromReferences
-      if filterPath(path)
-      doc <- documents.get(path).toList
-    } {
-      // Check bloom filter for @main annotation reference
-      if (doc.bloomFilter.mightContain(mainAnnotRef)) {
-        // For @main annotated methods, we need to find method symbols
-        // that could be annotated. We'll add all method symbols as candidates.
-        for (symbolInfo <- doc.symbols) {
-          val symbol = symbolInfo.getSymbol()
-          val kind = symbolInfo.getKind()
-          // Methods that could have @main annotation
-          if (kind == Semanticdb.SymbolInformation.Kind.METHOD) {
-            candidates += BuildTargetClasses.MainClassCandidate(path, symbol)
-          }
-        }
-      }
-      // For App extension, we add class/object symbols as candidates
-      for (symbolInfo <- doc.symbols) {
-        val symbol = symbolInfo.getSymbol()
-        val kind = symbolInfo.getKind()
-        if (
-          kind == Semanticdb.SymbolInformation.Kind.OBJECT &&
-          Symbol(symbol).isToplevel
-        ) {
-          candidates += BuildTargetClasses.MainClassCandidate(path, symbol)
-        }
-
-      }
+      candidates += BuildTargetClasses.MainClassCandidate(path, symbol)
     }
     candidates.toSeq
   }
@@ -771,44 +760,45 @@ class MbtWorkspaceSymbolProvider(
    * BFS through the inheritance chain starting from the given symbols.
    * Returns all files that transitively reference those symbols as parents.
    *
-   * At each level, top-level traits and classes defined in the current
-   * frontier files are extracted from the MBT index and used as seeds for
-   * the next [[possibleReferences]] call. Already-visited paths are excluded
-   * to prevent cycles.
+   * Iterates to a fixed point on the symbol set, querying only newly discovered
+   * symbols per level (rather than re-querying the entire accumulated set).
    */
   private def transitiveReferenceFiles(
       references: Seq[String],
       implementations: Seq[String],
   ): Set[AbsolutePath] = {
     val allMatchedPaths = scala.collection.mutable.HashSet.empty[AbsolutePath]
+    val knownBases = scala.collection.mutable.HashSet.empty[String]
+    knownBases ++= implementations
+
     var frontier: Set[AbsolutePath] = possibleReferences(
       MbtPossibleReferencesParams(
         references = references,
         implementations = implementations,
       )
     )
+    var newBases: Seq[String] = implementations
 
-    while (frontier.nonEmpty) {
+    while (frontier.nonEmpty || newBases.nonEmpty) {
       allMatchedPaths ++= frontier
 
-      val nextBaseSymbols = frontier.flatMap { path =>
-        documents.get(path).toSeq.flatMap { doc =>
-          doc.symbols
-            .filter { sym =>
-              val kind = sym.getKind()
-              (kind == Semanticdb.SymbolInformation.Kind.TRAIT ||
-                kind == Semanticdb.SymbolInformation.Kind.CLASS) &&
-              Symbol(sym.getSymbol()).isToplevel
-            }
-            .map(_.getSymbol())
+      val nextBaseSymbols = frontier
+        .flatMap { path =>
+          documents.get(path).toSeq.flatMap { doc =>
+            TestDiscoveryCache.toplevelTypeSymbols(doc)
+          }
         }
-      }.toSeq
+        .filterNot(knownBases.contains)
+        .toSeq
+
+      knownBases ++= nextBaseSymbols
+      newBases = nextBaseSymbols
 
       frontier =
-        if (nextBaseSymbols.isEmpty) Set.empty
+        if (newBases.isEmpty) Set.empty
         else
           possibleReferences(
-            MbtPossibleReferencesParams(implementations = nextBaseSymbols)
+            MbtPossibleReferencesParams(implementations = newBases)
           ) -- allMatchedPaths
     }
 
@@ -823,6 +813,10 @@ class MbtWorkspaceSymbolProvider(
    * 1. Files referencing JUnit/TestNG annotation symbols (e.g., "org/junit/Test#")
    * 2. Files referencing base parent classes of test frameworks (e.g., "munit/FunSuite#")
    *
+   * Results come from the OID-keyed side index maintained during indexing. The
+   * `annotationSymbols` / `baseParentSymbols` parameters are retained for API
+   * compatibility; the cached closure is seeded from [[TestFrameworkSymbolRegistry]].
+   *
    * @param filterPath A function to filter which paths should be included
    * @param annotationSymbols JUnit/TestNG annotation symbols to search for
    * @param baseParentSymbols Base parent class symbols for ScalaTest, MUnit, Weaver, ZIO Test
@@ -832,34 +826,18 @@ class MbtWorkspaceSymbolProvider(
       annotationSymbols: Seq[String],
       baseParentSymbols: Seq[String],
   ): Seq[BuildTargetClasses.TestClassCandidate] = {
+    // Parameters kept for callers; discovery uses the registry-seeded closure.
+    val _ = (annotationSymbols, baseParentSymbols)
+    ensureTestDiscoveryReady()
     val candidates =
       scala.collection.mutable.ArrayBuffer
         .empty[BuildTargetClasses.TestClassCandidate]
-
-    val allMatchedPaths = transitiveReferenceFiles(
-      references = annotationSymbols,
-      implementations = baseParentSymbols,
-    )
-
     for {
-      path <- allMatchedPaths
+      (path, symbols) <- testCandidateDocuments
       if filterPath(path)
-      doc <- documents.get(path).toList
+      symbol <- symbols
     } {
-      // Add all class/object symbols as potential test class candidates
-      for (symbolInfo <- doc.symbols) {
-        val symbol = symbolInfo.getSymbol()
-        val kind = symbolInfo.getKind()
-        // Classes and objects that could be test suites
-        if (
-          kind == Semanticdb.SymbolInformation.Kind.CLASS ||
-          kind == Semanticdb.SymbolInformation.Kind.OBJECT
-        ) {
-          if (Symbol(symbol).isToplevel) {
-            candidates += BuildTargetClasses.TestClassCandidate(path, symbol)
-          }
-        }
-      }
+      candidates += BuildTargetClasses.TestClassCandidate(path, symbol)
     }
     candidates.toSeq
   }
@@ -867,59 +845,28 @@ class MbtWorkspaceSymbolProvider(
   def possibleReferences(
       params: MbtPossibleReferencesParams
   ): Set[AbsolutePath] = {
-    val queries = HashSet.empty[String]
-    params.implementations.foreach { symbol =>
-      val sym = Symbol(symbol)
-      if (sym.isMethod) {
-        queries += s"${sym.displayName}():"
-      } else if (sym.isType) {
-        queries += s"${sym.displayName}:"
-        // this is needed for now because the Scala top-level mtags indexer does not emit ':'
-        queries += s"${sym.displayName}#"
-      } else if (sym.isTerm) {
-        queries += s"${sym.displayName}."
-        // Scala vals and vars can be implemented via getters and setters
-        queries += s"${sym.displayName}():"
-      } else {
-        scribe.warn(
-          s"mbt-v2: unexpected implementation symbol for possibleReferences: ${symbol}"
-        )
-      }
-    }
-    params.references.foreach { ref =>
-      val sym = Symbol(ref)
-      if (sym.isGlobal) {
-        if (sym.isConstructor) {
-          queries += s"${sym.owner.displayName}."
-        } else if (sym.isMethod) {
-          queries += s"${sym.displayName}()."
-        } else {
-          queries += s"${sym.displayName}."
-          queries += s"${sym.displayName}:"
-          // Also search for method references - Java accesses Scala vals as methods
-          queries += s"${sym.displayName}()."
+    val fingerprints = TestDiscoveryCache.fingerprintsFor(
+      references = params.references,
+      implementations = params.implementations,
+    )
+    if (fingerprints.isEmpty) {
+      Set.empty
+    } else {
+      val result = TrieMap.empty[AbsolutePath, Unit]
+      // Iterate the ParArray directly so the bloom-filter scan stays parallel
+      // and we avoid copying all keys into a List.
+      for {
+        path <- documentsKeys
+        doc <- documents.get(path).toList.iterator
+        if fingerprints.exists(query => doc.bloomFilter.mightContain(query))
+      } {
+        if (doc.bloomFilter.isFull) {
+          scribe.warn(s"mbt-v2: bloom filter is full for ${path}")
         }
-      }
-    }
-    val fingerprints =
-      queries.iterator.map(FingerprintedCharSequence.fuzzyReference).toBuffer
-    val result = TrieMap.empty[AbsolutePath, Unit]
-    for {
-      path <- documentsKeys.toList
-      doc <- documents.get(path).toList.iterator
-      if fingerprints.exists(query => doc.bloomFilter.mightContain(query))
-    } {
-      if (doc.bloomFilter.isFull) {
-        scribe.warn(s"mbt-v2: bloom filter is full for ${path}")
-      }
-      if (path.exists) {
         result(path) = ()
-      } else {
-        // Clean up removed files
-        documents.remove(path)
       }
+      result.keysIterator.toSet
     }
-    result.keysIterator.toSet
   }
 
   // Convenience method to avoid dealing with the visitor-based query API
@@ -1019,22 +966,30 @@ class MbtWorkspaceSymbolProvider(
     if (metalsOutDir.exists(outDir => file.toNIO.startsWith(outDir))) {
       Future.unit
     } else if (MbtIndexFilter.included(indexFilters, MbtFileCandidate(file))) {
-      val old = documents.put(file, doc)
+      val docWithDiscovery =
+        if (testDiscoveryRegistryDigest.isDefined) {
+          attachTestDiscovery(doc)
+        } else {
+          removeFromCandidateIndexes(file)
+          doc.copy(testDiscovery = None)
+        }
+      val old = documents.put(file, docWithDiscovery)
       if (old == None && updateDocumentKeys) {
         updateDocumentsKeys(documents)
       }
-      addDocumentToPackages(doc.semanticdbPackages, file)
+      addDocumentToPackages(docWithDiscovery.semanticdbPackages, file)
 
       if (
         updateDocumentKeys &&
-        doc.language.isJava &&
+        docWithDiscovery.language.isJava &&
         javaSymbolLoader().isTurbineClasspath
       ) {
-        doc.semanticdbPackages.headOption match {
+        docWithDiscovery.semanticdbPackages.headOption match {
           case Some(pkg) =>
             val input = file.toInputFromBuffers(buffers)
             val packageName = normalizePackageName(pkg)
-            val compilationUnit = doc.toSemanticdbCompilationUnit(input)
+            val compilationUnit =
+              docWithDiscovery.toSemanticdbCompilationUnit(input)
             turbineCompiler
               .onDidChange(packageName, compilationUnit)
               .ignoreValue
@@ -1043,7 +998,7 @@ class MbtWorkspaceSymbolProvider(
         }
       } else if (
         updateDocumentKeys &&
-        doc.language.isProtobuf &&
+        docWithDiscovery.language.isProtobuf &&
         javaSymbolLoader().isTurbineClasspath
       ) {
         // Covers proto files changed outside the editor (e.g. git checkout);
@@ -1055,6 +1010,228 @@ class MbtWorkspaceSymbolProvider(
         Future.unit
       }
     } else Future.unit
+  }
+
+  /**
+   * Computes and attaches [[TestDiscoveryData]] for a document against the
+   * current test-base closure, updating the candidate side indexes.
+   */
+  private def attachTestDiscovery(doc: IndexedDocument): IndexedDocument = {
+    val data = TestDiscoveryCache.computeTestDiscoveryData(
+      doc,
+      testClosureFingerprints,
+    )
+    updateCandidateIndexes(doc.file, data)
+    if (data.matchesTestClosure) {
+      val closure = testBaseClosure.get()
+      for (sym <- TestDiscoveryCache.toplevelTypeSymbols(doc)) {
+        if (!closure.contains(sym)) {
+          pendingClosureAdditions.add(sym)
+        }
+      }
+    }
+    doc.withTestDiscovery(data)
+  }
+
+  private def updateCandidateIndexes(
+      path: AbsolutePath,
+      data: TestDiscoveryData,
+  ): Unit = {
+    val prevTest = testCandidateDocuments.get(path)
+    val prevMain = mainCandidateDocuments.get(path)
+    if (data.matchesTestClosure && data.testCandidateSymbols.nonEmpty) {
+      testCandidateDocuments.put(path, data.testCandidateSymbols)
+    } else {
+      testCandidateDocuments.remove(path)
+    }
+    if (data.mainCandidateSymbols.nonEmpty) {
+      mainCandidateDocuments.put(path, data.mainCandidateSymbols)
+    } else {
+      mainCandidateDocuments.remove(path)
+    }
+    val testChanged = prevTest != testCandidateDocuments.get(path)
+    val mainChanged = prevMain != mainCandidateDocuments.get(path)
+    if (testChanged || mainChanged) {
+      indexGenerationCounter.incrementAndGet()
+    }
+  }
+
+  private def removeFromCandidateIndexes(path: AbsolutePath): Unit = {
+    val removedTest = testCandidateDocuments.remove(path).isDefined
+    val removedMain = mainCandidateDocuments.remove(path).isDefined
+    if (removedTest || removedMain) {
+      indexGenerationCounter.incrementAndGet()
+    }
+  }
+
+  /**
+   * Ensures the test-base closure and per-document discovery data are current.
+   * Called after indexing and before serving candidates / writing the index.
+   */
+  def ensureTestDiscoveryReady(): Unit = synchronized {
+    val digest = TestDiscoveryCache.currentRegistryDigest
+    if (testDiscoveryRegistryDigest != Some(digest)) {
+      computeFullClosureAndAnnotateAll(digest)
+    } else {
+      annotateDocumentsMissingDiscovery()
+      drainPendingClosureAdditions()
+    }
+  }
+
+  private def setTestBaseClosure(
+      digest: String,
+      baseSymbols: Set[String],
+  ): Unit = {
+    testBaseClosure.set(baseSymbols)
+    testClosureFingerprints = TestDiscoveryCache.fingerprintsFor(
+      references = TestDiscoveryCache.annotationSymbols,
+      implementations = baseSymbols.toSeq,
+    )
+    testDiscoveryRegistryDigest = Some(digest)
+  }
+
+  /**
+   * Cold-start / digest-mismatch path: one full BFS over the workspace index,
+   * then annotate every document with discovery data.
+   */
+  private def computeFullClosureAndAnnotateAll(digest: String): Unit = {
+    val timer = new Timer(time)
+    testClosureFullScanCount.incrementAndGet()
+    pendingClosureAdditions.clear()
+    testCandidateDocuments.clear()
+    mainCandidateDocuments.clear()
+
+    val matchedPaths = transitiveReferenceFiles(
+      references = TestDiscoveryCache.annotationSymbols,
+      implementations = TestDiscoveryCache.seedBaseParentSymbols,
+    )
+    val discoveredBases = matchedPaths.flatMap { path =>
+      documents.get(path).toSeq.flatMap(TestDiscoveryCache.toplevelTypeSymbols)
+    }
+    val closure =
+      TestDiscoveryCache.seedBaseParentSymbols.toSet ++ discoveredBases
+    setTestBaseClosure(digest, closure)
+
+    var recomputed = 0
+    documents.foreach { case (path, doc) =>
+      val data = TestDiscoveryCache.computeTestDiscoveryData(
+        doc,
+        testClosureFingerprints,
+      )
+      updateCandidateIndexes(path, data)
+      documents.put(path, doc.withTestDiscovery(data))
+      recomputed += 1
+    }
+
+    metrics.recordEvent(
+      Event
+        .duration("mbt2_test_closure_full_scan", timer.elapsed)
+        .withLabel("closure_size", closure.size.toString)
+        .withLabel("documents", documents.size.toString)
+    )
+    metrics.recordEvent(
+      Event
+        .duration("mbt2_test_candidate_discovery", timer.elapsed)
+        .withLabel("cached_documents", "0")
+        .withLabel("recomputed_documents", recomputed.toString)
+        .withLabel("closure_size", closure.size.toString)
+        .withLabel(
+          "candidate_documents",
+          testCandidateDocuments.size.toString,
+        )
+    )
+    scribe.debug(
+      s"mbt-test: full closure scan found ${matchedPaths.size} candidate files, " +
+        s"closure size ${closure.size} in $timer"
+    )
+  }
+
+  private def annotateDocumentsMissingDiscovery(): Unit = {
+    var recomputed = 0
+    val timer = new Timer(time)
+    documents.foreach { case (path, doc) =>
+      if (doc.testDiscovery.isEmpty) {
+        documents.put(path, attachTestDiscovery(doc))
+        recomputed += 1
+      }
+    }
+    if (recomputed > 0) {
+      metrics.recordEvent(
+        Event
+          .duration("mbt2_test_candidate_discovery", timer.elapsed)
+          .withLabel("cached_documents", "0")
+          .withLabel("recomputed_documents", recomputed.toString)
+          .withLabel("closure_size", testBaseClosure.get().size.toString)
+          .withLabel(
+            "candidate_documents",
+            testCandidateDocuments.size.toString,
+          )
+      )
+    }
+  }
+
+  /**
+   * When newly-matched files define top-level types absent from the closure,
+   * expand the closure and re-scan only for the new fingerprints.
+   */
+  private def drainPendingClosureAdditions(): Unit = {
+    var pending = takePendingClosureAdditions()
+    while (pending.nonEmpty) {
+      val timer = new Timer(time)
+      val before = testBaseClosure.get()
+      val added = pending -- before
+      if (added.isEmpty) {
+        pending = Set.empty
+      } else {
+        val updated = before ++ added
+        setTestBaseClosure(
+          testDiscoveryRegistryDigest.getOrElse(
+            TestDiscoveryCache.currentRegistryDigest
+          ),
+          updated,
+        )
+        val newFingerprints = TestDiscoveryCache.fingerprintsFor(
+          references = Nil,
+          implementations = added.toSeq,
+        )
+        // Delta scan: only look for files matching the newly added bases.
+        for {
+          path <- documentsKeys
+          doc <- documents.get(path).toList
+          if TestDiscoveryCache.documentMatchesFingerprints(
+            doc,
+            newFingerprints,
+          )
+        } {
+          val data = TestDiscoveryCache.computeTestDiscoveryData(
+            doc,
+            testClosureFingerprints,
+          )
+          updateCandidateIndexes(path, data)
+          documents.put(path, doc.withTestDiscovery(data))
+          if (data.matchesTestClosure) {
+            for (sym <- TestDiscoveryCache.toplevelTypeSymbols(doc)) {
+              if (!updated.contains(sym)) {
+                pendingClosureAdditions.add(sym)
+              }
+            }
+          }
+        }
+        scribe.debug(
+          s"mbt-test: delta closure expansion added ${added.size} bases in $timer"
+        )
+        pending = takePendingClosureAdditions()
+      }
+    }
+  }
+
+  private def takePendingClosureAdditions(): Set[String] = {
+    if (pendingClosureAdditions.isEmpty) Set.empty
+    else {
+      val result = pendingClosureAdditions.asScala.toSet
+      pendingClosureAdditions.clear()
+      result
+    }
   }
 
   private def addDocumentToPackages(
@@ -1097,9 +1274,21 @@ class MbtWorkspaceSymbolProvider(
     )
     tmp.toFile.deleteOnExit()
     Using(bufferedOutputStream) { out =>
+      // Write the global test-discovery closure first. Protobuf merge semantics
+      // combine this with the per-document Index messages that follow.
+      testDiscoveryRegistryDigest.foreach { digest =>
+        Mbt.Index
+          .newBuilder()
+          .setTestDiscovery(
+            TestDiscoveryCache.toProto(digest, testBaseClosure.get())
+          )
+          .build()
+          .writeTo(out)
+      }
       documents.foreach { case (path, doc) =>
         if (!path.exists) {
           this.documents.remove(path)
+          removeFromCandidateIndexes(path)
         } else {
           // Append one document at a time to the output stream to avoid holding
           // a full copy of the binary payload in memory.  This is the main
@@ -1146,6 +1335,21 @@ class MbtWorkspaceSymbolProvider(
     val timer = new Timer(time)
     if (indexFile.exists) {
       val index = Mbt.Index.parseFrom(indexFile.readAllBytes)
+      val currentDigest = TestDiscoveryCache.currentRegistryDigest
+      val persistedDiscovery =
+        if (index.hasTestDiscovery) Some(index.getTestDiscovery) else None
+      val closureValid = persistedDiscovery.exists { discovery =>
+        discovery.getRegistryDigest == currentDigest
+      }
+      if (closureValid) {
+        val bases = persistedDiscovery.get.getBaseSymbolList.asScala.toSet
+        setTestBaseClosure(currentDigest, bases)
+      } else {
+        testBaseClosure.set(Set.empty)
+        testClosureFingerprints = Nil
+        testDiscoveryRegistryDigest = None
+      }
+
       for {
         doc <- index.getDocumentsList().asScala.iterator
         // Don't load old and incompatible versions of indexed files
@@ -1157,14 +1361,25 @@ class MbtWorkspaceSymbolProvider(
             doc.getSemanticdbPackageList().asScala.toList,
             path,
           )
-          result.put(path, IndexedDocument.fromProto(path, doc))
+          val indexed = IndexedDocument.fromProto(path, doc)
+          if (closureValid) {
+            indexed.testDiscovery.foreach(updateCandidateIndexes(path, _))
+            result.put(path, indexed)
+          } else {
+            // Digest mismatch or missing closure: drop stale discovery data so
+            // ensureTestDiscoveryReady will recompute.
+            result.put(path, indexed.copy(testDiscovery = None))
+          }
         } catch {
           case NonFatal(e) =>
             scribe.error(s"Error reading index file ${doc.getUri()}", e)
         }
       }
       logInfoInProdDebugInTests(
-        s"mbt-v2: read index for ${result.size} files in ${timer}"
+        s"mbt-v2: read index for ${result.size} files in ${timer}" +
+          (if (closureValid)
+             s" (test closure size ${testBaseClosure.get().size})"
+           else " (test closure stale, will recompute)")
       )
     }
     updateDocumentsKeys(result)
