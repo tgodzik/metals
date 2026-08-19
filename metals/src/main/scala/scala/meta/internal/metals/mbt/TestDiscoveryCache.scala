@@ -1,36 +1,20 @@
 package scala.meta.internal.metals.mbt
 
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 
-import scala.meta.internal.jmbt.Mbt
 import scala.meta.internal.jsemanticdb.Semanticdb
 import scala.meta.internal.metals.FingerprintedCharSequence
-import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.debug.TestFrameworkSymbolRegistry
 import scala.meta.internal.mtags.Symbol
 
 /**
- * Pure helpers for the OID-keyed MBT test/main candidate cache.
- *
- * The expensive workspace-wide BFS is replaced by:
- *   1. a global test-base closure of framework + custom base-suite symbols
- *   2. per-document [[TestDiscoveryData]] derived from a document's bloom filter
- *      against that closure
+ * Helpers for attaching test/main class candidates to a single indexed
+ * document. Discovery data lives on the document and is dropped whenever
+ * the file is re-indexed (new OID).
  */
 object TestDiscoveryCache {
-
-  /** Digest of the current framework registry; invalidates persisted closures. */
-  def currentRegistryDigest: String = {
-    val symbols =
-      (TestFrameworkSymbolRegistry.annotationSymbols ++
-        TestFrameworkSymbolRegistry.baseParentSymbols).sorted
-    sha1(symbols.mkString("\n"))
-  }
 
   def annotationSymbols: Seq[String] =
     TestFrameworkSymbolRegistry.annotationSymbols
@@ -84,7 +68,7 @@ object TestDiscoveryCache {
   ): Boolean =
     fingerprints.exists(query => doc.bloomFilter.mightContain(query))
 
-  /** Top-level class/trait symbols defined in the document (closure expansion). */
+  /** Top-level class/trait symbols defined in the document. */
   def toplevelTypeSymbols(doc: IndexedDocument): Seq[String] = {
     val result = ArrayBuffer.empty[String]
     for (symbolInfo <- doc.symbols) {
@@ -124,10 +108,11 @@ object TestDiscoveryCache {
       references = Seq("scala/main#", "scala/App#"),
       implementations = Nil,
     )
-  private val mainAnnotFingerprint: CharSequence =
-    FingerprintedCharSequence.fuzzyReference("scala/main#")
-  private val appFingerprint: CharSequence =
-    FingerprintedCharSequence.fuzzyReference("scala/App#")
+  private val mainAnnotFingerprints: Seq[CharSequence] =
+    fingerprintsFor(
+      references = Seq("scala/main#"),
+      implementations = Nil,
+    )
 
   /**
    * Derives main-class candidate symbols from a single document without a
@@ -141,23 +126,10 @@ object TestDiscoveryCache {
         result += symbol.stripSuffix("main().")
       }
     }
-    // Match how possibleReferences queries App/@main: display-name fingerprints
-    // (App., App:, ...), not the full-symbol fingerprint alone.
     val matchesMainRefs =
-      documentMatchesFingerprints(doc, mainReferenceFingerprints) ||
-        doc.bloomFilter.mightContain(mainAnnotFingerprint) ||
-        doc.bloomFilter.mightContain(appFingerprint)
+      documentMatchesFingerprints(doc, mainReferenceFingerprints)
     if (matchesMainRefs) {
-      val matchesMainAnnot =
-        doc.bloomFilter.mightContain(mainAnnotFingerprint) ||
-          documentMatchesFingerprints(
-            doc,
-            fingerprintsFor(
-              references = Seq("scala/main#"),
-              implementations = Nil,
-            ),
-          )
-      if (matchesMainAnnot) {
+      if (documentMatchesFingerprints(doc, mainAnnotFingerprints)) {
         for (symbolInfo <- doc.symbols) {
           if (symbolInfo.getKind == Semanticdb.SymbolInformation.Kind.METHOD) {
             result += symbolInfo.getSymbol
@@ -179,33 +151,15 @@ object TestDiscoveryCache {
 
   def computeTestDiscoveryData(
       doc: IndexedDocument,
-      closureFingerprints: Seq[CharSequence],
+      matchesTestFramework: Boolean,
   ): TestDiscoveryData = {
-    val matches = documentMatchesFingerprints(doc, closureFingerprints)
     val testCandidates =
-      if (matches) toplevelClassOrObjectSymbols(doc) else Seq.empty
+      if (matchesTestFramework) toplevelClassOrObjectSymbols(doc)
+      else Seq.empty
     TestDiscoveryData(
-      matchesTestClosure = matches,
+      matchesTestFramework = matchesTestFramework,
       testCandidateSymbols = testCandidates,
       mainCandidateSymbols = computeMainCandidateSymbols(doc),
     )
-  }
-
-  def toProto(
-      registryDigest: String,
-      baseSymbols: Iterable[String],
-  ): Mbt.TestDiscoveryIndex =
-    Mbt.TestDiscoveryIndex
-      .newBuilder()
-      .setRegistryDigest(registryDigest)
-      .addAllBaseSymbol(baseSymbols.asJava)
-      .build()
-
-  private def sha1(text: String): String = {
-    val digest = MessageDigest.getInstance("SHA-1")
-    digest
-      .digest(text.getBytes(StandardCharsets.UTF_8))
-      .map("%02x".format(_))
-      .mkString
   }
 }

@@ -8,12 +8,10 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.util.Comparator
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
 import java.{util => ju}
 import javax.tools.JavaFileManager
 import javax.tools.JavaFileObject
@@ -312,49 +310,20 @@ class MbtWorkspaceSymbolProvider(
     override def compare(o1: Path, o2: Path): Int = o1.compareTo(o2)
   }
 
-  // --- OID-keyed test/main candidate cache ---------------------------------
-  // Global transitive set of test base-type symbols (framework seeds + custom
-  // base suites discovered in the workspace). Guarded by registry digest.
-  private val testBaseClosure =
-    new AtomicReference[Set[String]](Set.empty)
-  @volatile private var testClosureFingerprints: Seq[CharSequence] = Nil
-  @volatile private var testDiscoveryRegistryDigest: Option[String] = None
-  // Side indexes: path -> candidate symbols. Avoids scanning the full index on
-  // every BuildTargetClasses.rebuildIndex call.
+  // --- Per-document test/main candidates (keyed by OID) --------------------
+  // Side indexes of documents that currently have candidates. Rebuilt from
+  // [[IndexedDocument.testDiscovery]] and dropped whenever a file is
+  // re-indexed (new OID, discovery data is None).
   private val testCandidateDocuments =
     TrieMap.empty[AbsolutePath, Seq[String]]
   private val mainCandidateDocuments =
     TrieMap.empty[AbsolutePath, Seq[String]]
-  // Top-level types defined in newly-matched files that are not yet in the
-  // closure; drained by a delta scan after indexing.
-  private val pendingClosureAdditions =
-    ConcurrentHashMap.newKeySet[String]()
   // Bumped whenever candidate side indexes change so BuildTargetClasses can
-  // short-circuit rebuildIndex when nothing new was discovered.
+  // skip rebuildIndex when nothing new was discovered.
   private val indexGenerationCounter = new AtomicLong(0L)
-  private val testClosureFullScanCount = new AtomicInteger(0)
 
   /** Generation of the candidate side indexes; increments on candidate changes. */
   def indexGeneration: Long = indexGenerationCounter.get()
-
-  /** Number of full workspace BFS scans performed (for tests/metrics). */
-  def testClosureFullScans: Int = testClosureFullScanCount.get()
-
-  /**
-   * Testing-only: force the next [[ensureTestDiscoveryReady]] to recompute the
-   * closure from scratch (simulates a registry digest mismatch).
-   */
-  def invalidateTestDiscoveryCacheForTesting(): Unit = synchronized {
-    testDiscoveryRegistryDigest = None
-    testBaseClosure.set(Set.empty)
-    testClosureFingerprints = Nil
-    pendingClosureAdditions.clear()
-    testCandidateDocuments.clear()
-    mainCandidateDocuments.clear()
-    documents.foreach { case (path, doc) =>
-      documents.put(path, doc.copy(testDiscovery = None))
-    }
-  }
 
   // The source of truth for what files belong to the workspace, and their attached indexed data.
   // DO NOT update this map directly since have a couple derivative collections.
@@ -467,8 +436,8 @@ class MbtWorkspaceSymbolProvider(
       Event.duration("mbt2_index_workspace_symbol_pre_write", timer.elapsed)
     )
 
-    // Ensure the OID-keyed test/main candidate cache is up to date before we
-    // persist the index, so the next startup can skip the workspace-wide BFS.
+    // Fill test/main candidates for any documents whose OID just changed
+    // (discovery data is None) before persisting the index.
     ensureTestDiscoveryReady()
 
     // Step 4: Write the index to disk. It's technically fine to move writing
@@ -737,7 +706,7 @@ class MbtWorkspaceSymbolProvider(
    * 2. Files referencing "scala/main#" (@main annotation)
    * 3. Files referencing "scala/App#" (App trait extension)
    *
-   * Results come from the OID-keyed side index maintained during indexing.
+   * Results come from per-document discovery data attached at the current OID.
    */
   def candidateMainClasses(
       filterPath: AbsolutePath => Boolean
@@ -757,55 +726,6 @@ class MbtWorkspaceSymbolProvider(
   }
 
   /**
-   * BFS through the inheritance chain starting from the given symbols.
-   * Returns all files that transitively reference those symbols as parents.
-   *
-   * Iterates to a fixed point on the symbol set, querying only newly discovered
-   * symbols per level (rather than re-querying the entire accumulated set).
-   */
-  private def transitiveReferenceFiles(
-      references: Seq[String],
-      implementations: Seq[String],
-  ): Set[AbsolutePath] = {
-    val allMatchedPaths = scala.collection.mutable.HashSet.empty[AbsolutePath]
-    val knownBases = scala.collection.mutable.HashSet.empty[String]
-    knownBases ++= implementations
-
-    var frontier: Set[AbsolutePath] = possibleReferences(
-      MbtPossibleReferencesParams(
-        references = references,
-        implementations = implementations,
-      )
-    )
-    var newBases: Seq[String] = implementations
-
-    while (frontier.nonEmpty || newBases.nonEmpty) {
-      allMatchedPaths ++= frontier
-
-      val nextBaseSymbols = frontier
-        .flatMap { path =>
-          documents.get(path).toSeq.flatMap { doc =>
-            TestDiscoveryCache.toplevelTypeSymbols(doc)
-          }
-        }
-        .filterNot(knownBases.contains)
-        .toSeq
-
-      knownBases ++= nextBaseSymbols
-      newBases = nextBaseSymbols
-
-      frontier =
-        if (newBases.isEmpty) Set.empty
-        else
-          possibleReferences(
-            MbtPossibleReferencesParams(implementations = newBases)
-          ) -- allMatchedPaths
-    }
-
-    allMatchedPaths.toSet
-  }
-
-  /**
    * Extracts potential test class candidates from the MBT index without loading semanticdb.
    * Returns candidates that need to be confirmed via semanticdb before use.
    *
@@ -813,9 +733,9 @@ class MbtWorkspaceSymbolProvider(
    * 1. Files referencing JUnit/TestNG annotation symbols (e.g., "org/junit/Test#")
    * 2. Files referencing base parent classes of test frameworks (e.g., "munit/FunSuite#")
    *
-   * Results come from the OID-keyed side index maintained during indexing. The
-   * `annotationSymbols` / `baseParentSymbols` parameters are retained for API
-   * compatibility; the cached closure is seeded from [[TestFrameworkSymbolRegistry]].
+   * Results come from per-document discovery data attached at the current OID.
+   * The `annotationSymbols` / `baseParentSymbols` parameters are retained for API
+   * compatibility; discovery uses [[TestFrameworkSymbolRegistry]].
    *
    * @param filterPath A function to filter which paths should be included
    * @param annotationSymbols JUnit/TestNG annotation symbols to search for
@@ -826,7 +746,6 @@ class MbtWorkspaceSymbolProvider(
       annotationSymbols: Seq[String],
       baseParentSymbols: Seq[String],
   ): Seq[BuildTargetClasses.TestClassCandidate] = {
-    // Parameters kept for callers; discovery uses the registry-seeded closure.
     val _ = (annotationSymbols, baseParentSymbols)
     ensureTestDiscoveryReady()
     val candidates =
@@ -966,30 +885,42 @@ class MbtWorkspaceSymbolProvider(
     if (metalsOutDir.exists(outDir => file.toNIO.startsWith(outDir))) {
       Future.unit
     } else if (MbtIndexFilter.included(indexFilters, MbtFileCandidate(file))) {
-      val docWithDiscovery =
-        if (testDiscoveryRegistryDigest.isDefined) {
-          attachTestDiscovery(doc)
-        } else {
-          removeFromCandidateIndexes(file)
-          doc.copy(testDiscovery = None)
-        }
-      val old = documents.put(file, docWithDiscovery)
+      // Discovery data is tied to OID: keep it when the hash is unchanged
+      // (e.g. git-status didChange of a clean file), drop it when content
+      // changed so the new document is checked again.
+      val toStore = doc.testDiscovery match {
+        case Some(_) => doc
+        case None =>
+          documents.get(file) match {
+            case Some(old) if old.oid == doc.oid =>
+              old.testDiscovery.fold(doc)(doc.withTestDiscovery)
+            case _ => doc
+          }
+      }
+      val old = documents.put(file, toStore)
+      if (toStore.testDiscovery.isEmpty) {
+        removeFromCandidateIndexes(file)
+      } else {
+        toStore.testDiscovery.foreach(updateCandidateIndexes(file, _))
+      }
       if (old == None && updateDocumentKeys) {
         updateDocumentsKeys(documents)
       }
-      addDocumentToPackages(docWithDiscovery.semanticdbPackages, file)
+      addDocumentToPackages(toStore.semanticdbPackages, file)
+      if (updateDocumentKeys) {
+        ensureTestDiscoveryReady()
+      }
 
       if (
         updateDocumentKeys &&
-        docWithDiscovery.language.isJava &&
+        toStore.language.isJava &&
         javaSymbolLoader().isTurbineClasspath
       ) {
-        docWithDiscovery.semanticdbPackages.headOption match {
+        toStore.semanticdbPackages.headOption match {
           case Some(pkg) =>
             val input = file.toInputFromBuffers(buffers)
             val packageName = normalizePackageName(pkg)
-            val compilationUnit =
-              docWithDiscovery.toSemanticdbCompilationUnit(input)
+            val compilationUnit = toStore.toSemanticdbCompilationUnit(input)
             turbineCompiler
               .onDidChange(packageName, compilationUnit)
               .ignoreValue
@@ -998,7 +929,7 @@ class MbtWorkspaceSymbolProvider(
         }
       } else if (
         updateDocumentKeys &&
-        docWithDiscovery.language.isProtobuf &&
+        toStore.language.isProtobuf &&
         javaSymbolLoader().isTurbineClasspath
       ) {
         // Covers proto files changed outside the editor (e.g. git checkout);
@@ -1013,24 +944,82 @@ class MbtWorkspaceSymbolProvider(
   }
 
   /**
-   * Computes and attaches [[TestDiscoveryData]] for a document against the
-   * current test-base closure, updating the candidate side indexes.
+   * Fills [[TestDiscoveryData]] for any documents that were re-indexed (OID
+   * changed, data is None). Already-checked documents are left untouched.
+   *
+   * New files are matched against the test-framework registry plus top-level
+   * types from documents that already matched, so custom base suites work
+   * without scanning unchanged files.
    */
-  private def attachTestDiscovery(doc: IndexedDocument): IndexedDocument = {
-    val data = TestDiscoveryCache.computeTestDiscoveryData(
-      doc,
-      testClosureFingerprints,
-    )
-    updateCandidateIndexes(doc.file, data)
-    if (data.matchesTestClosure) {
-      val closure = testBaseClosure.get()
-      for (sym <- TestDiscoveryCache.toplevelTypeSymbols(doc)) {
-        if (!closure.contains(sym)) {
-          pendingClosureAdditions.add(sym)
+  def ensureTestDiscoveryReady(): Unit = synchronized {
+    var remaining = documents.iterator.collect {
+      case (path, doc) if doc.testDiscovery.isEmpty => path -> doc
+    }.toList
+    if (remaining.nonEmpty) {
+      val timer = new Timer(time)
+      var fingerprints = discoveryFingerprints()
+      var recomputed = 0
+      while (remaining.nonEmpty) {
+        val (matched, unmatched) = remaining.partition { case (_, doc) =>
+          TestDiscoveryCache.documentMatchesFingerprints(doc, fingerprints)
+        }
+        if (matched.isEmpty) {
+          unmatched.foreach { case (path, doc) =>
+            attachDiscovery(path, doc, matchesTestFramework = false)
+            recomputed += 1
+          }
+          remaining = Nil
+        } else {
+          val newTypes = matched.flatMap { case (path, doc) =>
+            attachDiscovery(path, doc, matchesTestFramework = true)
+            recomputed += 1
+            TestDiscoveryCache.toplevelTypeSymbols(doc)
+          }
+          fingerprints = fingerprints ++ TestDiscoveryCache.fingerprintsFor(
+            references = Nil,
+            implementations = newTypes,
+          )
+          remaining = unmatched
         }
       }
+      metrics.recordEvent(
+        Event
+          .duration("mbt2_test_candidate_discovery", timer.elapsed)
+          .withLabel("recomputed_documents", recomputed.toString)
+          .withLabel(
+            "candidate_documents",
+            testCandidateDocuments.size.toString,
+          )
+      )
+      scribe.debug(
+        s"mbt-test: attached discovery data to $recomputed documents in $timer"
+      )
     }
-    doc.withTestDiscovery(data)
+  }
+
+  private def discoveryFingerprints(): Seq[CharSequence] = {
+    val extra = documents.iterator.flatMap { case (_, doc) =>
+      doc.testDiscovery match {
+        case Some(data) if data.matchesTestFramework =>
+          TestDiscoveryCache.toplevelTypeSymbols(doc)
+        case _ => Iterator.empty
+      }
+    }.toSeq
+    TestDiscoveryCache.fingerprintsFor(
+      references = TestDiscoveryCache.annotationSymbols,
+      implementations = TestDiscoveryCache.seedBaseParentSymbols ++ extra,
+    )
+  }
+
+  private def attachDiscovery(
+      path: AbsolutePath,
+      doc: IndexedDocument,
+      matchesTestFramework: Boolean,
+  ): Unit = {
+    val data =
+      TestDiscoveryCache.computeTestDiscoveryData(doc, matchesTestFramework)
+    documents.put(path, doc.withTestDiscovery(data))
+    updateCandidateIndexes(path, data)
   }
 
   private def updateCandidateIndexes(
@@ -1039,7 +1028,7 @@ class MbtWorkspaceSymbolProvider(
   ): Unit = {
     val prevTest = testCandidateDocuments.get(path)
     val prevMain = mainCandidateDocuments.get(path)
-    if (data.matchesTestClosure && data.testCandidateSymbols.nonEmpty) {
+    if (data.testCandidateSymbols.nonEmpty) {
       testCandidateDocuments.put(path, data.testCandidateSymbols)
     } else {
       testCandidateDocuments.remove(path)
@@ -1061,176 +1050,6 @@ class MbtWorkspaceSymbolProvider(
     val removedMain = mainCandidateDocuments.remove(path).isDefined
     if (removedTest || removedMain) {
       indexGenerationCounter.incrementAndGet()
-    }
-  }
-
-  /**
-   * Ensures the test-base closure and per-document discovery data are current.
-   * Called after indexing and before serving candidates / writing the index.
-   */
-  def ensureTestDiscoveryReady(): Unit = synchronized {
-    val digest = TestDiscoveryCache.currentRegistryDigest
-    if (testDiscoveryRegistryDigest != Some(digest)) {
-      computeFullClosureAndAnnotateAll(digest)
-    } else {
-      annotateDocumentsMissingDiscovery()
-      drainPendingClosureAdditions()
-    }
-  }
-
-  private def setTestBaseClosure(
-      digest: String,
-      baseSymbols: Set[String],
-  ): Unit = {
-    testBaseClosure.set(baseSymbols)
-    testClosureFingerprints = TestDiscoveryCache.fingerprintsFor(
-      references = TestDiscoveryCache.annotationSymbols,
-      implementations = baseSymbols.toSeq,
-    )
-    testDiscoveryRegistryDigest = Some(digest)
-  }
-
-  /**
-   * Cold-start / digest-mismatch path: one full BFS over the workspace index,
-   * then annotate every document with discovery data.
-   */
-  private def computeFullClosureAndAnnotateAll(digest: String): Unit = {
-    val timer = new Timer(time)
-    testClosureFullScanCount.incrementAndGet()
-    pendingClosureAdditions.clear()
-    testCandidateDocuments.clear()
-    mainCandidateDocuments.clear()
-
-    val matchedPaths = transitiveReferenceFiles(
-      references = TestDiscoveryCache.annotationSymbols,
-      implementations = TestDiscoveryCache.seedBaseParentSymbols,
-    )
-    val discoveredBases = matchedPaths.flatMap { path =>
-      documents.get(path).toSeq.flatMap(TestDiscoveryCache.toplevelTypeSymbols)
-    }
-    val closure =
-      TestDiscoveryCache.seedBaseParentSymbols.toSet ++ discoveredBases
-    setTestBaseClosure(digest, closure)
-
-    var recomputed = 0
-    documents.foreach { case (path, doc) =>
-      val data = TestDiscoveryCache.computeTestDiscoveryData(
-        doc,
-        testClosureFingerprints,
-      )
-      updateCandidateIndexes(path, data)
-      documents.put(path, doc.withTestDiscovery(data))
-      recomputed += 1
-    }
-
-    metrics.recordEvent(
-      Event
-        .duration("mbt2_test_closure_full_scan", timer.elapsed)
-        .withLabel("closure_size", closure.size.toString)
-        .withLabel("documents", documents.size.toString)
-    )
-    metrics.recordEvent(
-      Event
-        .duration("mbt2_test_candidate_discovery", timer.elapsed)
-        .withLabel("cached_documents", "0")
-        .withLabel("recomputed_documents", recomputed.toString)
-        .withLabel("closure_size", closure.size.toString)
-        .withLabel(
-          "candidate_documents",
-          testCandidateDocuments.size.toString,
-        )
-    )
-    scribe.debug(
-      s"mbt-test: full closure scan found ${matchedPaths.size} candidate files, " +
-        s"closure size ${closure.size} in $timer"
-    )
-  }
-
-  private def annotateDocumentsMissingDiscovery(): Unit = {
-    var recomputed = 0
-    val timer = new Timer(time)
-    documents.foreach { case (path, doc) =>
-      if (doc.testDiscovery.isEmpty) {
-        documents.put(path, attachTestDiscovery(doc))
-        recomputed += 1
-      }
-    }
-    if (recomputed > 0) {
-      metrics.recordEvent(
-        Event
-          .duration("mbt2_test_candidate_discovery", timer.elapsed)
-          .withLabel("cached_documents", "0")
-          .withLabel("recomputed_documents", recomputed.toString)
-          .withLabel("closure_size", testBaseClosure.get().size.toString)
-          .withLabel(
-            "candidate_documents",
-            testCandidateDocuments.size.toString,
-          )
-      )
-    }
-  }
-
-  /**
-   * When newly-matched files define top-level types absent from the closure,
-   * expand the closure and re-scan only for the new fingerprints.
-   */
-  private def drainPendingClosureAdditions(): Unit = {
-    var pending = takePendingClosureAdditions()
-    while (pending.nonEmpty) {
-      val timer = new Timer(time)
-      val before = testBaseClosure.get()
-      val added = pending -- before
-      if (added.isEmpty) {
-        pending = Set.empty
-      } else {
-        val updated = before ++ added
-        setTestBaseClosure(
-          testDiscoveryRegistryDigest.getOrElse(
-            TestDiscoveryCache.currentRegistryDigest
-          ),
-          updated,
-        )
-        val newFingerprints = TestDiscoveryCache.fingerprintsFor(
-          references = Nil,
-          implementations = added.toSeq,
-        )
-        // Delta scan: only look for files matching the newly added bases.
-        for {
-          path <- documentsKeys
-          doc <- documents.get(path).toList
-          if TestDiscoveryCache.documentMatchesFingerprints(
-            doc,
-            newFingerprints,
-          )
-        } {
-          val data = TestDiscoveryCache.computeTestDiscoveryData(
-            doc,
-            testClosureFingerprints,
-          )
-          updateCandidateIndexes(path, data)
-          documents.put(path, doc.withTestDiscovery(data))
-          if (data.matchesTestClosure) {
-            for (sym <- TestDiscoveryCache.toplevelTypeSymbols(doc)) {
-              if (!updated.contains(sym)) {
-                pendingClosureAdditions.add(sym)
-              }
-            }
-          }
-        }
-        scribe.debug(
-          s"mbt-test: delta closure expansion added ${added.size} bases in $timer"
-        )
-        pending = takePendingClosureAdditions()
-      }
-    }
-  }
-
-  private def takePendingClosureAdditions(): Set[String] = {
-    if (pendingClosureAdditions.isEmpty) Set.empty
-    else {
-      val result = pendingClosureAdditions.asScala.toSet
-      pendingClosureAdditions.clear()
-      result
     }
   }
 
@@ -1274,17 +1093,6 @@ class MbtWorkspaceSymbolProvider(
     )
     tmp.toFile.deleteOnExit()
     Using(bufferedOutputStream) { out =>
-      // Write the global test-discovery closure first. Protobuf merge semantics
-      // combine this with the per-document Index messages that follow.
-      testDiscoveryRegistryDigest.foreach { digest =>
-        Mbt.Index
-          .newBuilder()
-          .setTestDiscovery(
-            TestDiscoveryCache.toProto(digest, testBaseClosure.get())
-          )
-          .build()
-          .writeTo(out)
-      }
       documents.foreach { case (path, doc) =>
         if (!path.exists) {
           this.documents.remove(path)
@@ -1335,21 +1143,6 @@ class MbtWorkspaceSymbolProvider(
     val timer = new Timer(time)
     if (indexFile.exists) {
       val index = Mbt.Index.parseFrom(indexFile.readAllBytes)
-      val currentDigest = TestDiscoveryCache.currentRegistryDigest
-      val persistedDiscovery =
-        if (index.hasTestDiscovery) Some(index.getTestDiscovery) else None
-      val closureValid = persistedDiscovery.exists { discovery =>
-        discovery.getRegistryDigest == currentDigest
-      }
-      if (closureValid) {
-        val bases = persistedDiscovery.get.getBaseSymbolList.asScala.toSet
-        setTestBaseClosure(currentDigest, bases)
-      } else {
-        testBaseClosure.set(Set.empty)
-        testClosureFingerprints = Nil
-        testDiscoveryRegistryDigest = None
-      }
-
       for {
         doc <- index.getDocumentsList().asScala.iterator
         // Don't load old and incompatible versions of indexed files
@@ -1362,24 +1155,15 @@ class MbtWorkspaceSymbolProvider(
             path,
           )
           val indexed = IndexedDocument.fromProto(path, doc)
-          if (closureValid) {
-            indexed.testDiscovery.foreach(updateCandidateIndexes(path, _))
-            result.put(path, indexed)
-          } else {
-            // Digest mismatch or missing closure: drop stale discovery data so
-            // ensureTestDiscoveryReady will recompute.
-            result.put(path, indexed.copy(testDiscovery = None))
-          }
+          indexed.testDiscovery.foreach(updateCandidateIndexes(path, _))
+          result.put(path, indexed)
         } catch {
           case NonFatal(e) =>
             scribe.error(s"Error reading index file ${doc.getUri()}", e)
         }
       }
       logInfoInProdDebugInTests(
-        s"mbt-v2: read index for ${result.size} files in ${timer}" +
-          (if (closureValid)
-             s" (test closure size ${testBaseClosure.get().size})"
-           else " (test closure stale, will recompute)")
+        s"mbt-v2: read index for ${result.size} files in ${timer}"
       )
     }
     updateDocumentsKeys(result)

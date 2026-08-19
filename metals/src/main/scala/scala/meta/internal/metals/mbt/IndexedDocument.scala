@@ -25,17 +25,19 @@ import scala.meta.pc.SemanticdbCompilationUnit
 import com.google.protobuf.ByteString
 
 /**
- * Derived test/main discovery data for a single indexed document.
+ * Test/main class candidates attached to a single indexed document at its
+ * current OID. A new [[IndexedDocument]] (new OID) starts with `None` and the
+ * data is filled in later; it is never reused across content hashes.
  *
- * @param matchesTestClosure true when the document's bloom filter matches the
- *   current test-base closure (annotation or base-parent reference).
+ * @param matchesTestFramework true when this file referenced a test annotation
+ *   or a known test base type.
  * @param testCandidateSymbols top-level class/object symbols that are potential
- *   test suites when [[matchesTestClosure]] is true.
+ *   test suites when [[matchesTestFramework]] is true.
  * @param mainCandidateSymbols potential main-class symbols (@main, App, main
  *   methods) derived from this document alone.
  */
 case class TestDiscoveryData(
-    matchesTestClosure: Boolean,
+    matchesTestFramework: Boolean,
     testCandidateSymbols: Seq[String],
     mainCandidateSymbols: Seq[String],
 )
@@ -129,7 +131,7 @@ case class IndexedDocument(
     testDiscovery.foreach { data =>
       builder
         .setHasTestDiscoveryData(true)
-        .setMatchesTestClosure(data.matchesTestClosure)
+        .setMatchesTestClosure(data.matchesTestFramework)
         .addAllTestCandidateSymbol(data.testCandidateSymbols.asJava)
         .addAllMainCandidateSymbol(data.mainCandidateSymbols.asJava)
     }
@@ -283,7 +285,7 @@ object IndexedDocument {
       if (doc.getHasTestDiscoveryData) {
         Some(
           TestDiscoveryData(
-            matchesTestClosure = doc.getMatchesTestClosure,
+            matchesTestFramework = doc.getMatchesTestClosure,
             testCandidateSymbols = doc.getTestCandidateSymbolList.asScala.toSeq,
             mainCandidateSymbols = doc.getMainCandidateSymbolList.asScala.toSeq,
           )

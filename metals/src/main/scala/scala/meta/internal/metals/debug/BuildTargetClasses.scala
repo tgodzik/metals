@@ -625,8 +625,6 @@ final class BuildTargetClasses(
           "mbt-classes: MBT workspace symbol provider is not available."
         )
       case Some(mbtProvider) =>
-        // Drain any pending closure expansions from live edits before reading
-        // the generation, so newly introduced base suites are visible.
         mbtProvider.ensureTestDiscoveryReady()
         val generation = mbtProvider.indexGeneration
         if (generation == lastMbtIndexGeneration) {
