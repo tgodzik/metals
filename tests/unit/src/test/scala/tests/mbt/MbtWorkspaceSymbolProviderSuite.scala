@@ -8,6 +8,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 import scala.meta.internal.metals.Configs
+import scala.meta.internal.metals.debug.TestFrameworkSymbolRegistry
 import scala.meta.internal.metals.mbt.IndexingStats
 import scala.meta.internal.metals.mbt.MbtWorkspaceSymbolProvider
 import scala.meta.io.AbsolutePath
@@ -195,6 +196,135 @@ module com.example {
       5.seconds,
     )
     assertEquals(provider.allFiles(), Nil)
+  }
+
+  test("candidate-test-classes-junit") {
+    FileLayout.fromString(
+      """
+/com/MyTest.java
+package com;
+import org.junit.Test;
+public class MyTest {
+  @Test
+  public void runs() {}
+}
+/com/Helper.java
+package com;
+public class Helper {
+  public void runs() {}
+}
+""",
+      root = workspace(),
+    )
+    val provider = newProvider()
+    workspace.executeCommand("git init -b main")
+    workspace.gitCommitAllChanges()
+    provider.onReindex().awaitBackgroundJobs()
+    val candidates = provider.candidateTestClasses(
+      _ => true,
+      TestFrameworkSymbolRegistry.annotationSymbols,
+      TestFrameworkSymbolRegistry.baseParentSymbols,
+    )
+    val relative = candidates
+      .map(c => c.path.toRelative(workspace()).toString)
+      .distinct
+      .sorted
+    assertEquals(relative, List(Paths.get("com/MyTest.java").toString()))
+    assertEquals(
+      candidates.map(_.candidateSymbol).toSet,
+      Set("com/MyTest#"),
+    )
+  }
+
+  test("candidate-test-classes-custom-funsuite-base") {
+    FileLayout.fromString(
+      """
+/example/MySuite.scala
+package example
+trait MySuite extends munit.FunSuite
+/example/FooTest.scala
+package example
+class FooTest extends MySuite
+/example/Unrelated.scala
+package example
+class Unrelated
+""",
+      root = workspace(),
+    )
+    val provider = newProvider()
+    workspace.executeCommand("git init -b main")
+    workspace.gitCommitAllChanges()
+    provider.onReindex().awaitBackgroundJobs()
+    val candidates = provider.candidateTestClasses(
+      _ => true,
+      annotationSymbols = Nil,
+      baseParentSymbols = Seq("munit/FunSuite#"),
+    )
+    val relative = candidates
+      .map(c => c.path.toRelative(workspace()).toString)
+      .distinct
+      .sorted
+    assertEquals(
+      relative,
+      List(Paths.get("example/FooTest.scala").toString()),
+    )
+    assertEquals(
+      candidates.map(_.candidateSymbol).toSet,
+      Set("example/FooTest#"),
+    )
+  }
+
+  test("candidate-main-classes") {
+    FileLayout.fromString(
+      """
+/com/Main.java
+package com;
+public class Main {
+  public static void main(String[] args) {}
+}
+/com/Hello.scala
+package com
+object Hello {
+  def main(args: Array[String]): Unit = ()
+}
+/com/Helper.java
+package com;
+public class Helper {
+  public void other() {}
+}
+/com/NotApp.scala
+package com
+object NotApp
+/com/MainApp.scala
+package com
+object MainApp extends App
+""",
+      root = workspace(),
+    )
+    val provider = newProvider()
+    workspace.executeCommand("git init -b main")
+    workspace.gitCommitAllChanges()
+    provider.onReindex().awaitBackgroundJobs()
+    val candidates = provider.candidateMainClasses(_ => true)
+    val byFile = candidates
+      .groupBy(_.path.toRelative(workspace()).toString)
+      .view
+      .mapValues(_.map(_.candidateSymbol).toSet)
+      .toMap
+    assertEquals(
+      byFile.get(Paths.get("com/Main.java").toString()),
+      Some(Set("com/Main#")),
+    )
+    assertEquals(
+      byFile.get(Paths.get("com/Hello.scala").toString()),
+      Some(Set("com/Hello.")),
+    )
+    assertEquals(
+      byFile.get(Paths.get("com/MainApp.scala").toString()),
+      Some(Set("com/MainApp.")),
+    )
+    assert(!byFile.contains(Paths.get("com/Helper.java").toString()))
+    assert(!byFile.contains(Paths.get("com/NotApp.scala").toString()))
   }
 
   def manuallyTestWorkspace(
